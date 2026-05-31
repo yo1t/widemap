@@ -21,6 +21,10 @@
 - **7日間の接続履歴**を永続保存
 - ダークテーマのシングルページUI（グラフビュー、地図ビュー、統計ビュー）
 
+## デモ
+
+<video src="docs/widemap-redacted.mp4" controls width="800"></video>
+
 ## スクリーンショット
 
 ![widemap1](docs/widemap1.png)
@@ -187,6 +191,13 @@ SSH接続とNATディスクリプタに対応した全モデル：
 ## ライセンス
 
 [AGPL-3.0](LICENSE) — このソフトウェアを改変してネットワークサービスとして提供する場合、変更内容を公開する必要があります。
+
+```
+Widemap — リアルタイムネットワーク接続可視化ツール
+Copyright (C) 2025 Yoichi Takizawa
+
+ソースコード: https://github.com/yo1t/widemap
+```
 
 ## コントリビュート
 
