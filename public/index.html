@@ -1,0 +1,2855 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Widemap</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0e1a; --panel: #111827; --border: #1f2937;
+    --text: #e2e8f0; --muted: #6b7280; --accent: #3b82f6;
+    --green: #10b981; --yellow: #f59e0b; --red: #ef4444;
+    --purple: #8b5cf6; --cyan: #06b6d4;
+  }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono','Fira Code',monospace; font-size: 13px; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Settings overlay ────────────────────────────── */
+  #settings-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; transition: opacity 0.2s;
+  }
+  #settings-overlay.hidden { opacity: 0; pointer-events: none; }
+  .settings-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .settings-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+  }
+  .settings-title { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; }
+  .settings-close { background: transparent; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
+  .settings-close:hover { color: var(--text); }
+  .settings-body { display: flex; flex: 1; overflow: hidden; }
+  /* Tabs (left sidebar) */
+  .settings-tabs {
+    width: 80px; flex-shrink: 0; border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 12px 0; gap: 4px;
+  }
+  .settings-tab {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 10px 6px; border: none; background: transparent;
+    cursor: pointer; border-radius: 0; gap: 3px;
+    border-left: 3px solid transparent; transition: all 0.15s;
+  }
+  .settings-tab:hover { background: rgba(255,255,255,0.04); }
+  .settings-tab.active { background: rgba(59,130,246,0.08); border-left-color: var(--accent); }
+  .tab-badge {
+    font-size: 11px; font-weight: 700; font-family: 'SF Mono','Fira Code',monospace;
+    color: var(--muted); letter-spacing: 0.02em;
+  }
+  .settings-tab.active .tab-badge { color: var(--accent); }
+  .tab-name { font-size: 9px; color: var(--muted); letter-spacing: 0.06em; }
+  /* Tab content (right) */
+  .settings-panes { flex: 1; overflow-y: auto; padding: 20px 22px; }
+  .settings-pane { display: none; }
+  .settings-pane.active { display: block; }
+  .pane-title {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600; color: var(--text);
+    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none;
+  }
+  .pane-title input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
+  .section-inputs { transition: opacity 0.2s; }
+  .section-inputs.disabled { opacity: 0.35; pointer-events: none; }
+  .settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .form-group { margin-bottom: 12px; }
+  .form-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 5px; display: block; }
+  .form-input {
+    width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+    font-family: inherit; font-size: 12px; transition: border-color 0.15s; outline: none;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .connect-btn {
+    width: 100%; padding: 10px; margin-top: 8px;
+    background: var(--accent); border: none; border-radius: 8px;
+    color: #fff; font-family: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s, opacity 0.15s;
+  }
+  .connect-btn:hover { background: #2563eb; }
+  .connect-btn:disabled { opacity: 0.5; cursor: default; }
+  .settings-status {
+    margin-top: 12px; padding: 8px 12px; border-radius: 6px;
+    font-size: 12px; display: none;
+  }
+  .settings-status.ok  { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: var(--green); }
+  .settings-status.err { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.35); color: var(--red); }
+  .spinner {
+    display: inline-block; width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
+    border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* ── Disconnected banner ─────────────────────────── */
+  #disconnected-banner {
+    display: none; padding: 8px 20px; background: rgba(239,68,68,0.12);
+    border-bottom: 1px solid rgba(239,68,68,0.3); color: var(--red);
+    font-size: 12px; text-align: center; flex-shrink: 0;
+  }
+  #disconnected-banner button {
+    background: transparent; border: 1px solid var(--red); border-radius: 4px;
+    color: var(--red); font-family: inherit; font-size: 11px; padding: 2px 8px;
+    cursor: pointer; margin-left: 8px; transition: background 0.15s;
+  }
+  #disconnected-banner button:hover { background: rgba(239,68,68,0.2); }
+
+  /* ── Header ─────────────────────────────────────── */
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  header h1 { font-size: 15px; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.error  { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+  /* ── Time filter ─────────────────────────────────── */
+  .time-filter {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 3px 4px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .time-filter-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; padding-left: 4px; }
+  .time-filter select {
+    background: transparent; border: none; outline: none;
+    color: var(--text); font-family: inherit; font-size: 11px; cursor: pointer;
+    padding: 3px 4px;
+  }
+  .time-filter select option { background: var(--panel); color: var(--text); }
+  .time-custom-input {
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: inherit; font-size: 11px; padding: 2px 4px;
+    color-scheme: dark; outline: none;
+  }
+  .time-custom-input:focus { border-color: var(--accent); }
+  /* ── Connection badges ───────────────────────────── */
+  .conn-badges { display: flex; gap: 6px; align-items: center; }
+  .conn-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px;
+    font-size: 11px; color: var(--muted); background: var(--bg);
+  }
+  .conn-badge .badge-layer { font-family: 'SF Mono','Fira Code',monospace; font-weight: 700; color: var(--muted); font-size: 10px; letter-spacing: 0.02em; }
+  .conn-badge .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  .conn-badge .badge-ip { color: var(--text); font-size: 11px; }
+  .conn-badge.on  { border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.08); }
+  .conn-badge.on  .badge-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .conn-badge.on  .badge-layer { color: var(--green); }
+  .conn-badge.off { border-color: rgba(107,114,128,0.3); opacity: 0.5; }
+  .conn-badge.err { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
+  .conn-badge.err .badge-dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
+  .conn-badge.err .badge-layer { color: var(--red); }
+  .header-stats { display: flex; gap: 24px; margin-left: auto; }
+  .stat { display: flex; flex-direction: column; align-items: flex-end; }
+  .stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat-value { font-size: 13px; font-weight: 600; }
+  /* ── View tabs ───────────────────────────────────── */
+  .view-tabs { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
+  .view-tab {
+    padding: 4px 12px; background: transparent; border: none; border-radius: 5px;
+    color: var(--muted); font-family: inherit; font-size: 11px; cursor: pointer;
+    transition: background 0.15s, color 0.15s; white-space: nowrap;
+  }
+  .view-tab.active { background: var(--accent); color: #fff; }
+  .view-tab:not(.active):hover { background: var(--border); color: var(--text); }
+  /* ── Settings button ─────────────────────────────── */
+  .settings-btn {
+    margin-left: 8px; padding: 5px 10px; background: transparent;
+    border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
+    font-family: inherit; font-size: 14px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  }
+  .settings-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .settings-btn.alert { border-color: var(--red); color: var(--red); animation: pulse-border 1.5s ease-in-out infinite; }
+  @keyframes pulse-border { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 0 4px rgba(239,68,68,0); } }
+
+  /* ── Main layout ─────────────────────────────────── */
+  .main { display: flex; flex: 1; overflow: hidden; }
+  #graph-container { flex: 1; position: relative; overflow: hidden; }
+  /* ── Zoom controls ────────────────────────────────── */
+  .zoom-controls {
+    position: absolute; right: 10px; bottom: 16px;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    background: rgba(17,24,39,0.92); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px; z-index: 10;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  .zoom-btn {
+    width: 28px; height: 28px; background: transparent; border: none;
+    color: var(--text); font-family: inherit; font-size: 14px;
+    cursor: pointer; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.15s, color 0.15s;
+  }
+  .zoom-btn:hover { background: rgba(59,130,246,0.2); color: var(--accent); }
+  .zoom-slider-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    height: 100px; margin: 4px 0; justify-content: center;
+  }
+  .zoom-slider {
+    appearance: none; -webkit-appearance: none;
+    width: 80px; height: 4px; background: var(--border); border-radius: 2px;
+    outline: none; transform: rotate(-90deg); transform-origin: center;
+  }
+  .zoom-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 12px; height: 12px; background: var(--accent);
+    border-radius: 50%; cursor: pointer; border: 2px solid var(--panel);
+  }
+  .zoom-slider::-moz-range-thumb {
+    width: 12px; height: 12px; background: var(--accent);
+    border-radius: 50%; cursor: pointer; border: 2px solid var(--panel);
+  }
+  .zoom-pct { font-size: 9px; color: var(--muted); font-family: 'SF Mono','Fira Code',monospace; min-width: 28px; text-align: center; }
+  #graph { width: 100%; height: 100%; }
+  #map-container { flex: 1; position: relative; overflow: hidden; background: #0b1629; }
+  /* ── Stats view ──────────────────────────────────── */
+  #stats-container {
+    flex: 1; display: none; flex-direction: column; overflow: hidden;
+    background: var(--bg); padding: 10px; gap: 10px;
+  }
+  .stats-header { font-size: 12px; font-weight: 600; color: var(--text); padding: 4px 8px; }
+  .stats-chart {
+    flex: 1; min-height: 180px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .stats-chart-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .stats-chart-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-shrink: 0; }
+  .stats-chart svg { flex: 1; width: 100%; height: 100%; }
+  /* Bar chart: scroll when content is large */
+  #stats-bar { overflow-y: auto; }
+  #stats-bar svg { flex: none; width: 100%; height: auto; }
+  /* Chart mode toggle */
+  .chart-mode-toggle { display: flex; gap: 1px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px; }
+  .chart-mode-btn {
+    padding: 2px 8px; background: transparent; border: none; border-radius: 4px;
+    color: var(--muted); font-family: inherit; font-size: 10px; cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .chart-mode-btn.active { background: var(--accent); color: #fff; }
+  .chart-mode-btn:not(.active):hover { background: var(--border); color: var(--text); }
+  .stats-axis path, .stats-axis line { stroke: var(--border); }
+  .stats-axis text { fill: var(--muted); font-size: 10px; font-family: inherit; }
+  .stats-line { fill: none; stroke-width: 1.6; }
+  .stats-bar { transition: opacity 0.15s; }
+  .stats-bar:hover { opacity: 0.7; }
+  .stats-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 10px; color: var(--muted); margin-top: 4px; }
+  .stats-legend-item { display: flex; align-items: center; gap: 4px; }
+  .stats-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  #world-map { width: 100%; height: 100%; }
+  .map-country { fill: #162032; stroke: #253a56; stroke-width: 0.4px; }
+  .map-graticule { fill: none; stroke: #1a2d45; stroke-width: 0.3px; }
+  .map-sphere { fill: #0b1629; }
+  .map-dot { cursor: pointer; transition: r 0.2s; }
+  .map-dot:hover { stroke-width: 2px; }
+  .map-tooltip {
+    position: absolute; pointer-events: none; background: rgba(11,22,41,0.95);
+    border: 1px solid #2d4a6e; border-radius: 8px; padding: 10px 14px;
+    font-size: 12px; line-height: 1.6; max-width: 220px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 100; display: none;
+  }
+  .map-tooltip-name { font-weight: 700; font-size: 13px; color: #a78bfa; margin-bottom: 4px; }
+  .map-tooltip-row { display: flex; justify-content: space-between; gap: 12px; }
+  .map-tooltip-key { color: var(--muted); } .map-tooltip-val { color: var(--text); font-weight: 600; }
+
+  .graph-tooltip {
+    position: absolute; pointer-events: none; background: rgba(17,24,39,0.95);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
+    font-size: 12px; line-height: 1.6; max-width: 240px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 100; display: none;
+  }
+  .tooltip-name { font-weight: 700; font-size: 13px; color: var(--accent); margin-bottom: 4px; }
+  .tooltip-row { display: flex; justify-content: space-between; gap: 12px; }
+  .tooltip-key { color: var(--muted); } .tooltip-val { color: var(--text); font-weight: 600; }
+
+  /* ── Side panel ──────────────────────────────────── */
+  .side-panel { width: 373px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
+  .panel-header { padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); display: flex; align-items: center; gap: 8px; min-height: 40px; }
+  .panel-header-title { flex: 1; }
+  .device-search { flex: 0 0 auto; display: flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; gap: 5px; transition: border-color 0.15s; width: 130px; }
+  .device-search:focus-within { border-color: var(--accent); }
+  .device-search svg { flex-shrink: 0; opacity: 0.4; }
+  .device-search input { background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; width: 100%; text-transform: none; letter-spacing: 0; }
+  .device-search input::placeholder { color: var(--muted); }
+  .device-list { flex: 1; overflow-y: auto; padding: 8px; }
+  .device-list::-webkit-scrollbar { width: 4px; }
+  .device-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .device-card { padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border); cursor: pointer; transition: border-color 0.15s, background 0.15s; position: relative; }
+  /* Note body: scroll up to 3 lines, read-only (display only) */
+  .device-note {
+    display: block; font-size: 11px; margin-top: 4px;
+    line-height: 1.3em; max-height: 3.9em; overflow-y: auto;
+    color: var(--cyan); background: rgba(6,182,212,0.06);
+    border-left: 2px solid var(--cyan); padding: 4px 6px;
+    border-radius: 0 4px 4px 0;
+    white-space: pre-wrap; word-break: break-word; cursor: default;
+  }
+  .device-note.empty { display: none; }
+  .device-note::-webkit-scrollbar { width: 4px; }
+  .device-note::-webkit-scrollbar-thumb { background: var(--cyan); opacity: 0.4; border-radius: 2px; }
+  /* Edit icon: always visible, triggers edit modal */
+  .device-note-edit {
+    display: inline-block; cursor: pointer; padding: 1px 5px;
+    margin-left: 6px; color: var(--muted); border-radius: 4px;
+    font-size: 11px; transition: background 0.15s, color 0.15s;
+  }
+  .device-note-edit:hover { background: rgba(59,130,246,0.15); color: var(--accent); }
+  #note-overlay.hidden { display: none !important; }
+  .note-modal-card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px 22px; width: 460px; max-width: calc(100vw - 20px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  }
+  .note-modal-card textarea {
+    width: 100%; min-height: 100px; background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: inherit; font-size: 12px; padding: 8px 10px;
+    outline: none; resize: vertical;
+  }
+  .note-modal-card textarea:focus { border-color: var(--accent); }
+  .note-modal-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
+  .note-modal-actions button {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
+    background: transparent; color: var(--text); font-family: inherit; font-size: 12px;
+    cursor: pointer; transition: background 0.15s, border-color 0.15s;
+  }
+  .note-modal-actions button:hover { border-color: var(--accent); }
+  .note-modal-actions .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .note-modal-actions .btn-primary:hover { background: #2563eb; }
+  .note-modal-actions .btn-investigate { color: var(--cyan); border-color: var(--cyan); }
+  .note-modal-header { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+  .note-modal-sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+  .device-card:hover, .device-card.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
+  .device-card.wired   { border-left: 3px solid #ef4444; }
+  .device-card.wifi-2g { border-left: 3px solid var(--green); }
+  .device-card.wifi-5g { border-left: 3px solid var(--purple); }
+  .device-card.wifi-6g { border-left: 3px solid #eab308; }
+  .node-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle; font-weight: 600; }
+  .filter-tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab-btn { padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: inherit; font-size: 10px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
+  /* Line 1: IP / MAC (title) */
+  .device-title {
+    font-weight: 600; font-size: 12px;
+    font-family: 'SF Mono','Fira Code',monospace;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--text);
+  }
+  /* Line 2: device name (if present and different from IP) */
+  .device-name {
+    font-size: 11px; color: var(--accent); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .device-name.empty { display: none; }
+  /* Line 3: vendor (OUI) · connection type */
+  .device-meta {
+    font-size: 10px; color: var(--muted); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .device-meta.empty { display: none; }
+  /* Line 4: name resolution (DNS / mDNS) */
+  .device-resolved {
+    font-size: 10px; color: var(--green); margin-top: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    opacity: 0.85;
+  }
+  .device-resolved.empty { display: none; }
+  .device-traffic { display: flex; gap: 8px; margin-top: 6px; }
+  .traffic-pill { display: flex; align-items: center; gap: 4px; font-size: 10px; padding: 1px 6px; border-radius: 4px; }
+  .traffic-pill.rx { background: rgba(16,185,129,0.15); color: var(--green); }
+  .traffic-pill.tx { background: rgba(239,68,68,0.15); color: var(--red); }
+  .traffic-bar { height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 2px; }
+  .traffic-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
+  .traffic-bar-fill.rx { background: var(--green); }
+  .traffic-bar-fill.tx { background: var(--red); }
+  .conn-panel { border-top: 1px solid var(--border); flex-shrink: 0; max-height: 240px; display: flex; flex-direction: column; }
+  .conn-panel-header { padding: 8px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .conn-list { overflow-y: auto; flex: 1; }
+  .conn-list::-webkit-scrollbar { width: 4px; }
+  .conn-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .conn-row { padding: 5px 12px; border-bottom: 1px solid rgba(31,41,55,0.5); font-size: 11px; display: flex; align-items: flex-start; gap: 6px; }
+  .conn-proto { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(59,130,246,0.2); color: var(--accent); font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .conn-host { flex: 1; color: var(--text); min-width: 0; }
+  .conn-hostname { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .conn-rdap { display: block; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
+  .conn-port { color: var(--muted); font-size: 10px; flex-shrink: 0; margin-top: 2px; }
+  .conn-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 11px; }
+  .wan-panel { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .wan-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; }
+  .wan-bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+  .legend { position: absolute; bottom: 16px; left: 16px; display: flex; flex-direction: column; gap: 6px; background: rgba(17,24,39,0.85); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .last-update { position: absolute; top: 10px; right: 10px; font-size: 10px; color: var(--muted); }
+  #error-banner { display: none; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: var(--red); padding: 8px 16px; font-size: 12px; text-align: center; flex-shrink: 0; }
+
+  /* ── Mobile layout (≤768px) ─────────────────────── */
+  @media (max-width: 768px) {
+    /* Main as vertical stack + scrollable (so oversized content is reachable) */
+    .main { flex-direction: column; overflow-y: auto; }
+    /* Graph/Map/Stats use fixed heights */
+    #graph-container, #map-container, #stats-container { flex: 0 0 auto; height: 33vh; min-height: 200px; }
+    /* In stats mode, give the chart area a bit more room */
+    body.is-stats-mode #stats-container { height: 55vh; }
+    /* Mobile: shrink chart padding, compact legend */
+    .stats-chart { padding: 6px 8px; }
+    .stats-chart-title { font-size: 9px; }
+    .chart-mode-btn { padding: 2px 5px; font-size: 9px; }
+    .stats-legend { font-size: 9px; gap: 4px; }
+    .stats-axis text { font-size: 9px; }
+    /* Device list + connections panel: ensure a minimum height (scroll to view) */
+    .side-panel {
+      width: 100% !important;
+      flex: 0 0 auto;
+      min-height: 40vh;
+      max-height: none;
+      border-left: none;
+      border-top: 1px solid var(--border);
+    }
+    /* Make device list and connections panel the same height (50%/50%);
+       device list uses the full area when connections panel is hidden */
+    .device-list { flex: 1 1 0; min-height: 0; }
+    .conn-panel  { flex: 1 1 0; max-height: none !important; min-height: 0; }
+    /* Header wraps, hide unessential info */
+    header { flex-wrap: wrap; gap: 8px; padding: 8px 10px; }
+    header h1 { font-size: 14px; }
+    .header-stats { display: none; }
+    .conn-badges { flex-wrap: wrap; }
+    .conn-badge .badge-layer { font-size: 9px; }
+    .conn-badge .badge-ip { font-size: 10px; }
+    /* Compact tab and period selector */
+    .view-tab { padding: 3px 8px; font-size: 10px; }
+    .time-filter-label { display: none; }
+    .time-filter select { font-size: 10px; padding: 2px; }
+    /* Hide legend (gets in the way on small screens) */
+    .legend { display: none; }
+    .last-update { font-size: 9px; top: 4px; right: 6px; }
+    /* Smaller device cards */
+    .device-card { padding: 6px 10px; }
+    /* Make the settings modal fit the screen width */
+    .settings-card { width: calc(100vw - 20px); max-width: 460px; }
+    .settings-tabs { width: 64px; }
+    .tab-name { font-size: 8px; }
+    /* Smaller device search box */
+    .device-search { width: 100px; }
+  }
+  /* Even narrower screens */
+  @media (max-width: 480px) {
+    .conn-badges { display: none; }
+    .panel-header { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Note modal ───────────────────────────────────────────────────────────── -->
+<div id="note-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:1001;">
+  <div class="note-modal-card">
+    <div class="note-modal-header">📝 <span data-i18n="note.title">メモ</span> — <span id="note-target"></span></div>
+    <div class="note-modal-sub" data-i18n="note.hint">このノードが何かを記録できます。「自動調査」で IP からドラフトを生成します。</div>
+    <textarea id="note-textarea" maxlength="500" placeholder=""></textarea>
+    <div class="note-modal-actions">
+      <button class="btn-investigate" id="note-investigate-btn" data-i18n="note.investigate">🔍 自動調査</button>
+      <button id="note-cancel" data-i18n="note.cancel">キャンセル</button>
+      <button class="btn-primary" id="note-save" data-i18n="note.save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Settings overlay ─────────────────────────────────────────────────────── -->
+<div id="settings-overlay" class="hidden">
+  <div class="settings-card">
+    <div class="settings-header">
+      <span class="settings-title" data-i18n="settings.title">⚙ 設定</span>
+      <button class="settings-close" id="settings-close">✕</button>
+    </div>
+    <div class="settings-body">
+      <!-- Left: tabs -->
+      <nav class="settings-tabs">
+        <button class="settings-tab active" data-tab="l3l4">
+          <span class="tab-badge">L3/L4</span>
+          <span class="tab-name" data-i18n="settings.tab.l3l4">ルーター</span>
+        </button>
+        <button class="settings-tab" data-tab="l2">
+          <span class="tab-badge">L2</span>
+          <span class="tab-name" data-i18n="settings.tab.l2">WiFi AP</span>
+        </button>
+        <button class="settings-tab" data-tab="general">
+          <span class="tab-badge" data-i18n="settings.tab.general">一般</span>
+          <span class="tab-name">General</span>
+        </button>
+      </nav>
+      <!-- Right: content -->
+      <div class="settings-panes">
+        <!-- L3/L4: Yamaha -->
+        <div class="settings-pane active" id="pane-l3l4">
+          <label class="pane-title">
+            <input type="checkbox" id="enable-yamaha" checked>
+            <span data-i18n="settings.section.l3l4">Yamaha RTX (SSH)</span>
+          </label>
+          <div class="section-inputs" id="yamaha-inputs">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.field.ip">IP アドレス</label>
+              <input id="s-yamaha-ip" class="form-input" type="text" placeholder="192.168.1.1" autocomplete="off">
+            </div>
+            <div class="settings-row">
+              <div class="form-group">
+                <label class="form-label" data-i18n="settings.field.user">ユーザー名</label>
+                <input id="s-yamaha-user" class="form-input" type="text" autocomplete="off">
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="settings.field.pass">パスワード</label>
+                <input id="s-yamaha-pass" class="form-input" type="password" autocomplete="off">
+              </div>
+            </div>
+          </div>
+          <button class="connect-btn" id="yamaha-connect-btn" data-i18n="settings.btn.connect">接続</button>
+          <div class="settings-status" id="yamaha-status"></div>
+        </div>
+        <!-- L2: ASUS -->
+        <div class="settings-pane" id="pane-l2">
+          <label class="pane-title">
+            <input type="checkbox" id="enable-asus" checked>
+            <span data-i18n="settings.section.l2">ASUS WiFi AP</span>
+          </label>
+          <div class="section-inputs" id="asus-inputs">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.field.ip">IP アドレス</label>
+              <input id="s-asus-ip" class="form-input" type="text" placeholder="192.168.1.1" autocomplete="off">
+            </div>
+            <div class="settings-row">
+              <div class="form-group">
+                <label class="form-label" data-i18n="settings.field.user">ユーザー名</label>
+                <input id="s-asus-user" class="form-input" type="text" autocomplete="username">
+              </div>
+              <div class="form-group">
+                <label class="form-label" data-i18n="settings.field.pass">パスワード</label>
+                <input id="s-asus-pass" class="form-input" type="password" autocomplete="current-password">
+              </div>
+            </div>
+          </div>
+          <button class="connect-btn" id="asus-connect-btn" data-i18n="settings.btn.connect">接続</button>
+          <div class="settings-status" id="asus-status"></div>
+        </div>
+        <!-- General settings -->
+        <div class="settings-pane" id="pane-general">
+          <div class="pane-title" style="cursor:default" data-i18n="settings.section.general">一般設定</div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.general.lang">言語 (Language)</label>
+            <select id="s-language" class="form-input">
+              <option value="ja">🇯🇵 日本語 (Japanese)</option>
+              <option value="en">🇬🇧 English</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.general.country">ネットワーク機器の設置場所（国）</label>
+            <select id="s-home-country" class="form-input">
+              <option value="JP">🇯🇵 日本</option>
+              <option value="US">🇺🇸 アメリカ合衆国</option>
+              <option value="CA">🇨🇦 カナダ</option>
+              <option value="GB">🇬🇧 イギリス</option>
+              <option value="DE">🇩🇪 ドイツ</option>
+              <option value="FR">🇫🇷 フランス</option>
+              <option value="IT">🇮🇹 イタリア</option>
+              <option value="ES">🇪🇸 スペイン</option>
+              <option value="NL">🇳🇱 オランダ</option>
+              <option value="SE">🇸🇪 スウェーデン</option>
+              <option value="CH">🇨🇭 スイス</option>
+              <option value="NO">🇳🇴 ノルウェー</option>
+              <option value="AU">🇦🇺 オーストラリア</option>
+              <option value="NZ">🇳🇿 ニュージーランド</option>
+              <option value="CN">🇨🇳 中国</option>
+              <option value="KR">🇰🇷 韓国</option>
+              <option value="TW">🇹🇼 台湾</option>
+              <option value="HK">🇭🇰 香港</option>
+              <option value="SG">🇸🇬 シンガポール</option>
+              <option value="IN">🇮🇳 インド</option>
+              <option value="BR">🇧🇷 ブラジル</option>
+              <option value="RU">🇷🇺 ロシア</option>
+            </select>
+          </div>
+          <p style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.6"
+             data-i18n-html="settings.general.note">
+            世界地図上でアークの起点となる場所です。<br>
+            日本以外を選択した場合、グリニッジを中心とした標準的な世界地図になります。
+          </p>
+          <div class="form-group" style="margin-top:18px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;">
+              <input type="checkbox" id="s-auto-investigate" style="width:14px;height:14px;cursor:pointer;accent-color:var(--accent)">
+              <span data-i18n="settings.general.auto">不明ノードを自動調査</span>
+            </label>
+            <p style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.5;padding-left:22px"
+               data-i18n="settings.general.auto.note">
+              メモが未記入のノードに対してバックグラウンドで ARP / mDNS / ポート調査を行い、メモを自動生成します（既存メモは上書きしません）。
+            </p>
+          </div>
+          <button class="connect-btn" id="general-save-btn" style="margin-top:16px" data-i18n="settings.btn.save">保存</button>
+          <div class="settings-status" id="general-status"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main app ────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="status-dot" id="status-dot"></div>
+  <h1>Widemap</h1>
+  <div class="view-tabs">
+    <button class="view-tab active" id="btn-graph" data-i18n="tab.graph">📊 グラフマップ</button>
+    <button class="view-tab" id="btn-map" data-i18n="tab.map">🗺 地図</button>
+    <button class="view-tab" id="btn-stats" data-i18n="tab.stats">📈 統計情報</button>
+  </div>
+  <div class="time-filter">
+    <span class="time-filter-label" data-i18n="period">期間</span>
+    <select id="time-filter-select">
+      <option value="live"      data-i18n="period.live">リアルタイム (15分以内)</option>
+      <option value="1h" selected data-i18n="period.1h">1時間以内</option>
+      <option value="3h"        data-i18n="period.3h">3時間以内</option>
+      <option value="6h"        data-i18n="period.6h">6時間以内</option>
+      <option value="12h"       data-i18n="period.12h">12時間以内</option>
+      <option value="24h"       data-i18n="period.24h">24時間以内</option>
+      <option value="today"     data-i18n="period.today">本日</option>
+      <option value="yesterday" data-i18n="period.yesterday">昨日</option>
+      <option value="7d"        data-i18n="period.7d">1週間以内</option>
+      <option value="all"       data-i18n="period.all">全期間</option>
+      <option value="custom"    data-i18n="period.custom">期間指定…</option>
+    </select>
+    <span id="custom-range" style="display:none; margin-left:6px; align-items:center; gap:4px;">
+      <input id="custom-from" type="datetime-local" class="time-custom-input">
+      <span style="color:var(--muted);font-size:10px;">〜</span>
+      <input id="custom-to"   type="datetime-local" class="time-custom-input">
+    </span>
+  </div>
+  <div class="conn-badges">
+    <div class="conn-badge off" id="badge-l3l4" title="L3/L4 ルーター（Yamaha）">
+      <span class="badge-layer">L3/L4</span>
+      <span class="badge-dot"></span>
+      <span class="badge-ip" id="badge-l3l4-ip">未接続</span>
+    </div>
+    <div class="conn-badge off" id="badge-l2" title="L2 WiFi AP（ASUS）">
+      <span class="badge-layer">L2</span>
+      <span class="badge-dot"></span>
+      <span class="badge-ip" id="badge-l2-ip">未接続</span>
+    </div>
+  </div>
+  <div class="header-stats">
+    <div class="stat">
+      <span class="stat-label" data-i18n="devices">接続デバイス</span>
+      <span class="stat-value" id="hdr-devices">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label" data-i18n="wan.rx">WAN ↓</span>
+      <span class="stat-value" style="color:var(--green)" id="hdr-wan-rx">—</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label" data-i18n="wan.tx">WAN ↑</span>
+      <span class="stat-value" style="color:var(--red)" id="hdr-wan-tx">—</span>
+    </div>
+  </div>
+  <button class="settings-btn" id="settings-btn" title="設定">⚙</button>
+</header>
+
+<div id="disconnected-banner">
+  <span data-i18n="banner.disconnected">セッションが切れています。</span>
+  <button onclick="openSettings()" data-i18n="banner.button">⚙ 設定から再接続</button>
+</div>
+<div id="error-banner"></div>
+
+<div class="main">
+  <div id="map-container" style="display:none">
+    <svg id="world-map"></svg>
+    <div class="map-tooltip" id="map-tooltip"></div>
+  </div>
+  <div id="stats-container" style="display:none">
+    <div class="stats-header">
+      <span id="stats-title">統計情報</span>
+      <span id="stats-subtitle" style="color:var(--muted);font-size:11px;margin-left:8px;"></span>
+    </div>
+    <div class="stats-chart" id="stats-timeline">
+      <div class="stats-chart-title-row">
+        <span class="stats-chart-title" data-i18n="stats.title.timeline">通信先別セッション数（時間推移）</span>
+        <div class="chart-mode-toggle">
+          <button class="chart-mode-btn active" data-mode="stack" data-i18n="stats.mode.stack">📈 積み上げ</button>
+          <button class="chart-mode-btn"        data-mode="line"  data-i18n="stats.mode.line">📊 線</button>
+        </div>
+      </div>
+      <svg id="chart-timeline"></svg>
+    </div>
+    <div class="stats-chart" id="stats-bar">
+      <div class="stats-chart-title" data-i18n="stats.title.bar">通信先別セッション数（合計）</div>
+      <svg id="chart-bar"></svg>
+    </div>
+    <div id="stats-empty" style="display:none; padding:40px; text-align:center; color:var(--muted);">
+      <span data-i18n="stats.empty.line1">表示するデータがありません</span><br>
+      <small style="font-size:10px" data-i18n="stats.empty.line2">期間や選択デバイスを変更してみてください</small>
+    </div>
+  </div>
+  <div id="graph-container">
+    <svg id="graph"></svg>
+    <div class="graph-tooltip" id="tooltip"></div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoom-in" title="ズームイン (+)">＋</button>
+      <div class="zoom-slider-wrap">
+        <input type="range" class="zoom-slider" id="zoom-slider" min="10" max="300" value="100" step="5" title="ズーム倍率">
+      </div>
+      <span class="zoom-pct" id="zoom-pct">100%</span>
+      <button class="zoom-btn" id="zoom-out" title="ズームアウト (-)">−</button>
+      <button class="zoom-btn" id="zoom-fit"  title="全体表示">⊡</button>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div><span data-i18n="legend.wired">有線 (LAN)</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div><span data-i18n="legend.wifi24">Wi-Fi 2.4GHz</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6"></div><span data-i18n="legend.wifi5">Wi-Fi 5GHz</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#eab308"></div><span data-i18n="legend.wifi6">Wi-Fi 6GHz</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div><span data-i18n="legend.mainrouter">メインルーター</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div><span data-i18n="legend.aimesh">AiMesh ノード</span></div>
+      <div class="legend-item"><div class="legend-dot" style="background:#6b7280"></div><span data-i18n="legend.internet">インターネット</span></div>
+    </div>
+    <div class="last-update" id="last-update"></div>
+  </div>
+  <div class="side-panel">
+    <div class="panel-header">
+      <span class="panel-header-title" data-i18n="panel.devices">接続デバイス一覧</span>
+      <div class="device-search">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="6.5" cy="6.5" r="4.5"/><line x1="10.5" y1="10.5" x2="14" y2="14"/>
+        </svg>
+        <input type="text" id="device-search-input" placeholder="名前・IPで検索" data-i18n-placeholder="panel.search.placeholder">
+      </div>
+    </div>
+    <div class="filter-tabs" id="filter-tabs">
+      <button class="tab-btn active" data-filter="all" data-i18n="panel.tab.all">全て</button>
+    </div>
+    <div class="device-list" id="device-list"></div>
+    <div class="conn-panel" id="conn-panel" style="display:none">
+      <div class="conn-panel-header">
+        <span id="conn-panel-title" data-i18n="panel.conn">インターネット通信先</span>
+        <span id="conn-count" style="color:var(--accent)"></span>
+      </div>
+      <div class="conn-list" id="conn-list"></div>
+    </div>
+    <div class="wan-panel">
+      <div class="wan-title" data-i18n="wan.title">WAN トラフィック</div>
+      <div class="wan-bar-label"><span>↓ ダウンロード</span><span id="wan-rx-label" style="color:var(--green)">—</span></div>
+      <div class="traffic-bar" style="margin-bottom:6px"><div class="traffic-bar-fill rx" id="wan-rx-bar" style="width:0%"></div></div>
+      <div class="wan-bar-label"><span>↑ アップロード</span><span id="wan-tx-label" style="color:var(--red)">—</span></div>
+      <div class="traffic-bar"><div class="traffic-bar-fill tx" id="wan-tx-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="__BASE__/socket.io/socket.io.js"></script>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script>
+// ─── Utilities ────────────────────────────────────────────────────────────────
+// ─── i18n ─────────────────────────────────────────────────────────────────────
+let currentLang = 'ja';
+const I18N = {
+  ja: {
+    // Header / Tabs
+    'tab.graph': '📊 グラフマップ', 'tab.map': '🗺 地図', 'tab.stats': '📈 統計情報',
+    'period': '期間', 'devices': '接続デバイス', 'wan.rx': 'WAN ↓', 'wan.tx': 'WAN ↑',
+    'settings.title': '⚙ 設定',
+    'period.live': 'リアルタイム (15分以内)', 'period.1h':'1時間以内', 'period.3h':'3時間以内',
+    'period.6h':'6時間以内', 'period.12h':'12時間以内', 'period.24h':'24時間以内',
+    'period.today':'本日', 'period.yesterday':'昨日', 'period.7d':'1週間以内',
+    'period.all':'全期間', 'period.custom':'期間指定…',
+    // Side panel
+    'panel.devices':'接続デバイス一覧', 'panel.search.placeholder':'名前・IPで検索',
+    'panel.conn':'インターネット通信先', 'panel.conn.session':'セッション', 'panel.conn.empty':'アクティブな通信なし',
+    'panel.tab.all':'全て',
+    // WAN section
+    'wan.title':'WAN トラフィック',
+    // Disconnect banner
+    'banner.disconnected':'セッションが切れています。', 'banner.button':'⚙ 設定から再接続',
+    'banner.yamaha':'⚙ Yamaha接続を再確認',
+    // Settings tabs/sections
+    'settings.tab.l3l4':'ルーター', 'settings.tab.l2':'WiFi AP', 'settings.tab.general':'General',
+    'settings.section.l3l4':'Yamaha RTX (SSH)', 'settings.section.l2':'ASUS WiFi AP',
+    'settings.section.general':'一般設定',
+    'settings.field.ip':'IP アドレス', 'settings.field.user':'ユーザー名', 'settings.field.pass':'パスワード',
+    'settings.pass.saved':'（保存済み — 変更する場合のみ入力）', 'settings.pass.empty':'パスワード',
+    'settings.btn.connect':'接続', 'settings.btn.disable':'無効化を反映',
+    'settings.btn.connecting':'接続中…', 'settings.btn.disabling':'反映中…',
+    'settings.btn.save':'保存', 'settings.btn.saving':'保存中…',
+    'settings.status.ok':'接続しました ✓', 'settings.status.disabled':'無効化しました ✓',
+    'settings.status.saved':'保存しました ✓',
+    'settings.general.country':'ネットワーク機器の設置場所（国）',
+    'settings.general.note':'世界地図上でアークの起点となる場所です。<br>日本以外を選択した場合、グリニッジを中心とした標準的な世界地図になります。',
+    'settings.general.lang':'言語 (Language)',
+    'settings.general.auto':'不明ノードを自動調査',
+    'settings.general.auto.note':'メモが未記入のノードに対してバックグラウンドで ARP / mDNS / ポート調査を行い、メモを自動生成します（既存メモは上書きしません / 24時間以内に調査済みの IP は再調査しません）。',
+    // Conn badge
+    'badge.unused':'未使用', 'badge.ready':'接続中', 'badge.timeout':'セッション切れ',
+    'badge.error':'失敗', 'badge.waiting':'接続中…',
+    // Stats
+    'stats.title.timeline':'通信先別セッション数（時間推移）',
+    'stats.title.bar':'通信先別セッション数（合計）',
+    'stats.legend.other':'その他', 'stats.mode.stack':'📈 積み上げ', 'stats.mode.line':'📊 線',
+    'stats.empty.line1':'表示するデータがありません',
+    'stats.empty.line2':'期間や選択デバイスを変更してみてください',
+    'stats.subtitle.device':'デバイス', 'stats.subtitle.all':'全デバイス', 'stats.subtitle.period':'期間',
+    // Tooltips
+    'tt.ip':'IP', 'tt.mac':'MAC', 'tt.papNode':'接続先', 'tt.type':'接続種別',
+    'tt.rx':'↓ 受信', 'tt.tx':'↑ 送信', 'tt.rssi':'RSSI',
+    'tt.role':'役割', 'tt.role.main':'メインルーター', 'tt.role.mesh':'AiMesh ノード',
+    'tt.country':'国', 'tt.sessions':'セッション数', 'tt.devices':'接続元デバイス',
+    'tt.internet':'インターネット (WAN)',
+    'maptt.place':'場所', 'maptt.session':'セッション', 'maptt.src':'接続元', 'maptt.devices':'台',
+    'maptt.state':'状態', 'maptt.state.active':'● アクティブ', 'maptt.state.idle':'● アイドル',
+    'maptt.state.timeout':'● タイムアウト間近', 'maptt.ttl.remain':'残',
+    // Settings validation
+    'err.asusCred':'ASUSルーターのユーザー名とパスワードを入力してください',
+    'err.atLeastOne':'少なくとも1つのルーターを有効にしてください',
+    'err.userRequired':'ユーザー名を入力してください', 'err.passRequired':'パスワードを入力してください',
+    'err.tokenInvalid':'トークンが正しくありません',
+    'err.serverGeneric':'サーバーエラー: ', 'err.tokenWrong':'トークンが拒否されました。再入力してください。',
+    'err.wsAuth':'WebSocket認証エラー。トークンを再入力してください。',
+    'prompt.token':'管理トークンを入力してください\n（サーバー初回起動時のログに表示されています）',
+    'alert.tokenRequired':'トークンが必要です',
+    'last-update.prefix':'最終更新: ',
+    'legend.wired':'有線 (LAN)', 'legend.wifi24':'Wi-Fi 2.4GHz', 'legend.wifi5':'Wi-Fi 5GHz', 'legend.wifi6':'Wi-Fi 6GHz',
+    'legend.mainrouter':'メインルーター', 'legend.aimesh':'AiMesh ノード', 'legend.internet':'インターネット',
+    // Type labels
+    'type.wired':'有線', 'type.wifi24':'Wi-Fi 2.4GHz', 'type.wifi5':'Wi-Fi 5GHz', 'type.wifi6':'Wi-Fi 6GHz', 'type.unknown':'不明',
+    'note.title':'メモ', 'note.hint':'このノードが何かを記録できます。「🔍 自動調査」で IP からドラフトを生成します。',
+    'note.placeholder':'例: リビングのSwitchBot ハブ', 'note.investigate':'🔍 自動調査',
+    'note.investigating':'🔍 調査中…', 'note.cancel':'キャンセル', 'note.save':'保存',
+    'note.investigate.fail':'調査に失敗しました', 'note.edit.tip':'メモを編集',
+  },
+  en: {
+    'tab.graph': '📊 Graph Map', 'tab.map': '🗺 World Map', 'tab.stats': '📈 Statistics',
+    'period': 'Period', 'devices': 'Devices', 'wan.rx': 'WAN ↓', 'wan.tx': 'WAN ↑',
+    'settings.title': '⚙ Settings',
+    'period.live': 'Live (last 15 min)', 'period.1h':'Last hour', 'period.3h':'Last 3 hours',
+    'period.6h':'Last 6 hours', 'period.12h':'Last 12 hours', 'period.24h':'Last 24 hours',
+    'period.today':'Today', 'period.yesterday':'Yesterday', 'period.7d':'Last week',
+    'period.all':'All time', 'period.custom':'Custom range…',
+    'panel.devices':'Connected Devices', 'panel.search.placeholder':'Search name or IP',
+    'panel.conn':'Internet Destinations', 'panel.conn.session':'sessions', 'panel.conn.empty':'No active traffic',
+    'panel.tab.all':'All',
+    'wan.title':'WAN Traffic',
+    'banner.disconnected':'Session has expired.', 'banner.button':'⚙ Reconnect via Settings',
+    'banner.yamaha':'⚙ Re-check Yamaha connection',
+    'settings.tab.l3l4':'Router', 'settings.tab.l2':'WiFi AP', 'settings.tab.general':'General',
+    'settings.section.l3l4':'Yamaha RTX (SSH)', 'settings.section.l2':'ASUS WiFi AP',
+    'settings.section.general':'General Settings',
+    'settings.field.ip':'IP Address', 'settings.field.user':'Username', 'settings.field.pass':'Password',
+    'settings.pass.saved':'(Saved — leave blank to keep)', 'settings.pass.empty':'Password',
+    'settings.btn.connect':'Connect', 'settings.btn.disable':'Apply (Disable)',
+    'settings.btn.connecting':'Connecting…', 'settings.btn.disabling':'Applying…',
+    'settings.btn.save':'Save', 'settings.btn.saving':'Saving…',
+    'settings.status.ok':'Connected ✓', 'settings.status.disabled':'Disabled ✓',
+    'settings.status.saved':'Saved ✓',
+    'settings.general.country':'Network equipment location (country)',
+    'settings.general.note':'Sets the arc origin on the world map.<br>If a country other than Japan is selected, a standard world map centered on Greenwich is used.',
+    'settings.general.lang':'Language (言語)',
+    'settings.general.auto':'Auto-investigate unknown nodes',
+    'settings.general.auto.note':'For nodes without a saved note, run ARP / mDNS / port scan in the background and auto-generate notes (existing notes are not overwritten / each IP is re-scanned at most once per 24h).',
+    'badge.unused':'Unused', 'badge.ready':'Connected', 'badge.timeout':'Session expired',
+    'badge.error':'Failed', 'badge.waiting':'Connecting…',
+    'stats.title.timeline':'Sessions per destination (over time)',
+    'stats.title.bar':'Sessions per destination (total)',
+    'stats.legend.other':'Other', 'stats.mode.stack':'📈 Stacked', 'stats.mode.line':'📊 Line',
+    'stats.empty.line1':'No data to display',
+    'stats.empty.line2':'Try a different period or selected device',
+    'stats.subtitle.device':'Device', 'stats.subtitle.all':'All devices', 'stats.subtitle.period':'Period',
+    'tt.ip':'IP', 'tt.mac':'MAC', 'tt.papNode':'Connected via', 'tt.type':'Connection',
+    'tt.rx':'↓ RX', 'tt.tx':'↑ TX', 'tt.rssi':'RSSI',
+    'tt.role':'Role', 'tt.role.main':'Main Router', 'tt.role.mesh':'AiMesh Node',
+    'tt.country':'Country', 'tt.sessions':'Sessions', 'tt.devices':'Source devices',
+    'tt.internet':'Internet (WAN)',
+    'maptt.place':'Location', 'maptt.session':'Sessions', 'maptt.src':'Source', 'maptt.devices':'devices',
+    'maptt.state':'State', 'maptt.state.active':'● Active', 'maptt.state.idle':'● Idle',
+    'maptt.state.timeout':'● Timing out', 'maptt.ttl.remain':'TTL',
+    'err.asusCred':'Enter ASUS router username and password',
+    'err.atLeastOne':'Enable at least one router',
+    'err.userRequired':'Enter a username', 'err.passRequired':'Enter a password',
+    'err.tokenInvalid':'Invalid token',
+    'err.serverGeneric':'Server error: ', 'err.tokenWrong':'Token rejected. Please enter again.',
+    'err.wsAuth':'WebSocket authentication error. Please re-enter the token.',
+    'prompt.token':'Enter the admin token\n(shown in the server log on first startup)',
+    'alert.tokenRequired':'A token is required',
+    'last-update.prefix':'Last update: ',
+    'legend.wired':'Wired (LAN)', 'legend.wifi24':'Wi-Fi 2.4GHz', 'legend.wifi5':'Wi-Fi 5GHz', 'legend.wifi6':'Wi-Fi 6GHz',
+    'legend.mainrouter':'Main router', 'legend.aimesh':'AiMesh node', 'legend.internet':'Internet',
+    'type.wired':'Wired', 'type.wifi24':'Wi-Fi 2.4GHz', 'type.wifi5':'Wi-Fi 5GHz', 'type.wifi6':'Wi-Fi 6GHz', 'type.unknown':'Unknown',
+    'note.title':'Note', 'note.hint':'Record what this node is. Use "🔍 Investigate" to draft from IP.',
+    'note.placeholder':'e.g. Living room SwitchBot hub', 'note.investigate':'🔍 Investigate',
+    'note.investigating':'🔍 Investigating…', 'note.cancel':'Cancel', 'note.save':'Save',
+    'note.investigate.fail':'Investigation failed', 'note.edit.tip':'Edit note',
+  },
+};
+function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) || I18N.ja[key] || key; }
+
+function applyI18n() {
+  document.documentElement.lang = currentLang;
+  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
+}
+
+// HTML escape (XSS mitigation: ASUS/Yamaha/DNS/RDAP-derived strings are untrusted)
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+function fmtBytes(bps) {
+  if (!bps || isNaN(bps)) return '0 B/s';
+  const u = ['B/s','KB/s','MB/s','GB/s'];
+  let i = 0;
+  while (bps >= 1024 && i < u.length - 1) { bps /= 1024; i++; }
+  return `${bps.toFixed(bps < 10 ? 1 : 0)} ${u[i]}`;
+}
+function nodeColor(type) {
+  if (type === '0') return '#ef4444';   // Wired: red
+  if (type === '1') return '#10b981';   // 2.4GHz: green
+  if (type === '2') return '#8b5cf6';   // 5GHz: purple
+  if (type === '3') return '#eab308';   // 6GHz: yellow
+  return '#6b7280';
+}
+function nodeClass(type) {
+  if (type === '0') return 'wired';
+  if (type === '1') return 'wifi-2g';
+  if (type === '2') return 'wifi-5g';
+  if (type === '3') return 'wifi-6g';
+  return 'wired';
+}
+function typeLabel(type) {
+  if (type === '0') return t('type.wired');
+  if (type === '1') return t('type.wifi24');
+  if (type === '2') return t('type.wifi5');
+  if (type === '3') return t('type.wifi6');
+  return t('type.unknown');
+}
+function isWiredType(type) { return type === '0'; }
+
+// ─── Settings modal ───────────────────────────────────────────────────────────
+const settingsOverlay = document.getElementById('settings-overlay');
+const settingsBtn     = document.getElementById('settings-btn');
+
+function openSettings() {
+  settingsOverlay.classList.remove('hidden');
+  settingsBtn.classList.remove('alert');
+}
+function closeSettings() { settingsOverlay.classList.add('hidden'); }
+
+settingsBtn.addEventListener('click', openSettings);
+document.getElementById('settings-close').addEventListener('click', closeSettings);
+settingsOverlay.addEventListener('click', e => { if (e.target === settingsOverlay) closeSettings(); });
+
+// Tab switching
+document.querySelectorAll('.settings-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const name = tab.dataset.tab;
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('pane-' + name).classList.add('active');
+  });
+});
+
+// Checkbox toggles enable/disable of input fields and updates the button label
+function toggleSection(inputsId, checkboxId, btnId) {
+  const enabled = document.getElementById(checkboxId).checked;
+  document.getElementById(inputsId).classList.toggle('disabled', !enabled);
+  if (btnId) {
+    document.getElementById(btnId).textContent = enabled ? t('settings.btn.connect') : t('settings.btn.disable');
+  }
+}
+document.getElementById('enable-yamaha').addEventListener('change',
+  () => toggleSection('yamaha-inputs', 'enable-yamaha', 'yamaha-connect-btn'));
+document.getElementById('enable-asus').addEventListener('change',
+  () => toggleSection('asus-inputs', 'enable-asus', 'asus-connect-btn'));
+
+function showStatus(elId, msg, ok) {
+  const el = document.getElementById(elId);
+  el.textContent = msg;
+  el.className = 'settings-status ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+}
+
+async function connectRouter(body, statusId, btnId, checkboxId) {
+  const btn = document.getElementById(btnId);
+  const enabled = checkboxId ? document.getElementById(checkboxId).checked : true;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>' + (enabled ? t('settings.btn.connecting') : t('settings.btn.disabling'));
+  document.getElementById(statusId).style.display = 'none';
+  try {
+    const res = await apiFetch('__BASE__/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      if (data.routerIp) { connState.l2.ip = data.routerIp; updateConnBadge('l2'); }
+      document.getElementById('disconnected-banner').style.display = 'none';
+      showStatus(statusId, enabled ? t('settings.status.ok') : t('settings.status.disabled'), true);
+      setTimeout(closeSettings, 1200);
+      return true;
+    } else {
+      showStatus(statusId, data.error || (enabled ? t('badge.error') : t('badge.error')), false);
+      return false;
+    }
+  } catch (err) {
+    showStatus(statusId, t('err.serverGeneric') + err.message, false);
+    return false;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = enabled ? t('settings.btn.connect') : t('settings.btn.disable');
+  }
+}
+
+// Apply Yamaha settings (L3/L4 tab)
+document.getElementById('yamaha-connect-btn').addEventListener('click', async () => {
+  const doYamaha = document.getElementById('enable-yamaha').checked;
+  const body = { doYamaha };
+  if (doYamaha) {
+    body.yamahaIp   = document.getElementById('s-yamaha-ip').value.trim()   || undefined;
+    body.yamahaUser = document.getElementById('s-yamaha-user').value.trim() || undefined;
+    const pw = document.getElementById('s-yamaha-pass').value;
+    if (pw) body.yamahaPass = pw; // omit if empty (server uses saved password)
+  }
+  const ok = await connectRouter(body, 'yamaha-status', 'yamaha-connect-btn', 'enable-yamaha');
+  if (ok) {
+    yamahaConfigured = doYamaha;
+    connState.l3l4.enabled = doYamaha;
+    connState.l3l4.ready   = false;        // wait for yamaha-status event for connection result
+    connState.l3l4.err     = '';
+    if (doYamaha && body.yamahaIp) connState.l3l4.ip = body.yamahaIp;
+    updateConnBadge('l3l4');
+    if (!doYamaha) {
+      allConnections = [];
+      if (!asusActive) stopGraph();
+      else if (simulation) updateOrgGraph();
+    }
+  }
+});
+
+// Apply ASUS settings (L2 tab)
+document.getElementById('asus-connect-btn').addEventListener('click', async () => {
+  const doAsus = document.getElementById('enable-asus').checked;
+  const passEl = document.getElementById('s-asus-pass');
+  // Even if password is empty, use the saved one if placeholder shows "saved"
+  const hasSavedPass = /保存済み/.test(passEl.placeholder);
+  if (doAsus) {
+    const user = document.getElementById('s-asus-user').value.trim();
+    const pass = passEl.value;
+    if (!user) { showStatus('asus-status', t('err.userRequired'), false); return; }
+    if (!pass && !hasSavedPass) {
+      showStatus('asus-status', t('err.passRequired'), false); return;
+    }
+  }
+  const body = { doAsus };
+  if (doAsus) {
+    body.routerIp = document.getElementById('s-asus-ip').value.trim() || undefined;
+    body.username = document.getElementById('s-asus-user').value.trim();
+    // Omit if empty (server uses saved password)
+    if (passEl.value) body.password = passEl.value;
+  }
+  const ok = await connectRouter(body, 'asus-status', 'asus-connect-btn', 'enable-asus');
+  if (ok) {
+    connState.l2.enabled = doAsus;
+    connState.l2.ready   = false; // becomes true on receiving network-update
+    connState.l2.err     = '';
+    if (doAsus && body.routerIp) connState.l2.ip = body.routerIp;
+    updateConnBadge('l2');
+    if (!doAsus) { asusActive = false; stopGraph(); }
+  }
+});
+
+// ─── D3 Graph Setup ───────────────────────────────────────────────────────────
+const svg = d3.select('#graph');
+let width = 0, height = 0;
+
+function resize() {
+  const el = document.getElementById('graph-container');
+  width = el.clientWidth; height = el.clientHeight;
+  svg.attr('width', width).attr('height', height);
+  if (simulation) {
+    simulation.force('x-center', d3.forceX(width/2).strength(0.04));
+    simulation.force('y-split',  d3.forceY(d => d.type === 'org' ? height * 0.22 : height * 0.72).strength(d => d.type === 'org' ? 0.15 : 0.06));
+    simulation.alpha(0.3).restart();
+  }
+  // Re-compute projection if the map is currently shown
+  if (mapMode && worldGeo) {
+    stopMapAnim();
+    renderWorldMap();
+    updateMapDots();
+    startMapAnim();
+  }
+  if (statsMode) updateStats();
+}
+window.addEventListener('resize', resize);
+// Redraw on screen rotation too
+window.addEventListener('orientationchange', () => setTimeout(resize, 200));
+
+const defs = svg.append('defs');
+const glow = defs.append('filter').attr('id', 'glow');
+glow.append('feGaussianBlur').attr('stdDeviation', '3').attr('result', 'coloredBlur');
+const feMerge = glow.append('feMerge');
+feMerge.append('feMergeNode').attr('in', 'coloredBlur');
+feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+['router','internet','client','meshnode','org'].forEach(id => {
+  const color = id === 'router' ? '#f59e0b' : id === 'internet' ? '#6b7280' : id === 'meshnode' ? '#f97316' : id === 'org' ? '#7c3aed' : '#3b82f6';
+  const refX  = id === 'org' ? 28 : 22;
+  defs.append('marker').attr('id', `marker-${id}`)
+    .attr('viewBox','0 -5 10 10').attr('refX', refX).attr('refY',0)
+    .attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill',color);
+});
+
+const g = svg.append('g');
+// Expose zoomBehavior as a variable so external UI can drive it
+const graphZoom = d3.zoom().scaleExtent([0.1, 3]).on('zoom', e => {
+  g.attr('transform', e.transform);
+  updateZoomUi(e.transform.k);
+});
+svg.call(graphZoom);
+
+function updateZoomUi(k) {
+  const pct = Math.round(k * 100);
+  const slider = document.getElementById('zoom-slider');
+  const label  = document.getElementById('zoom-pct');
+  if (slider && document.activeElement !== slider) slider.value = pct;
+  if (label) label.textContent = pct + '%';
+}
+
+document.getElementById('zoom-in').addEventListener('click', () => {
+  svg.transition().duration(200).call(graphZoom.scaleBy, 1.3);
+});
+document.getElementById('zoom-out').addEventListener('click', () => {
+  svg.transition().duration(200).call(graphZoom.scaleBy, 1 / 1.3);
+});
+document.getElementById('zoom-slider').addEventListener('input', e => {
+  const k = parseFloat(e.target.value) / 100;
+  const cur = d3.zoomTransform(svg.node());
+  svg.call(graphZoom.transform, d3.zoomIdentity.translate(cur.x, cur.y).scale(k));
+});
+document.getElementById('zoom-fit').addEventListener('click', () => {
+  if (!nodes || !nodes.length) return;
+  const xs = nodes.map(n => n.x).filter(v => v != null);
+  const ys = nodes.map(n => n.y).filter(v => v != null);
+  if (!xs.length) return;
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(...ys), yMax = Math.max(...ys);
+  const wBox = Math.max(50, xMax - xMin);
+  const hBox = Math.max(50, yMax - yMin);
+  const sw = svg.node().clientWidth  || width;
+  const sh = svg.node().clientHeight || height;
+  const padding = 80;
+  const k = Math.min(0.95, (sw - padding) / wBox, (sh - padding) / hBox, 3);
+  const kk = Math.max(0.1, k);
+  const tx = sw / 2 - (xMin + wBox / 2) * kk;
+  const ty = sh / 2 - (yMin + hBox / 2) * kk;
+  svg.transition().duration(400).call(
+    graphZoom.transform, d3.zoomIdentity.translate(tx, ty).scale(kk)
+  );
+});
+const linkGroup = g.append('g');
+const nodeGroup = g.append('g');
+
+let simulation = null;
+let nodes = [], links = [];
+let maxRate = 1024 * 512;
+let selectedMac = null;
+let currentFilter = 'all';
+let lastMeshNodes = [];
+let lastRouterIp = '';
+let lastSatellites = [];
+let lastClients = [];
+
+// Per-AiMesh-node identity colour
+const MESH_COLORS = ['#f59e0b','#f97316','#14b8a6','#a78bfa','#fb7185'];
+let meshColorMap = {};
+
+function flagEmoji(code) {
+  if (!code || code.length !== 2) return '';
+  return String.fromCodePoint(0x1F1E0 + code.charCodeAt(0) - 65, 0x1F1E0 + code.charCodeAt(1) - 65);
+}
+
+function meshNodeId(mac) { return `__node_${mac}__`; }
+
+function buildGraph(data) {
+  const clients = data.clients || [];
+  lastClients = clients;
+  const meshNodes = data.meshNodes || [];
+  lastMeshNodes = meshNodes;
+  lastRouterIp = data.routerIp;
+
+  // Identify the main router MAC
+  const mainNode = meshNodes.find(n => n.ip === data.routerIp);
+  const mainMac = mainNode?.mac || '';
+
+  // Satellite nodes (other than main router)
+  const satellites = meshNodes.filter(n => n.ip !== data.routerIp);
+  lastSatellites = satellites;
+
+  // Update colour mapping
+  meshColorMap = {};
+  meshNodes.forEach((n, i) => { meshColorMap[n.mac] = MESH_COLORS[i % MESH_COLORS.length]; });
+
+  const newNodes = [
+    { id: '__internet__', label: 'Internet', type: 'internet', fixed: true },
+    { id: '__router__', label: mainNode?.model || 'Router', type: 'router', fixed: true, meshNode: mainNode, meshMac: mainMac },
+    ...satellites.map(n => ({
+      id: meshNodeId(n.mac), label: n.model || 'AiMesh',
+      type: 'meshnode', fixed: false, meshNode: n, meshMac: n.mac,
+    })),
+    ...clients.map(c => ({ id: c.mac, label: c.name || c.ip, type: 'client', client: c }))
+  ];
+
+  const newLinks = [
+    { source: '__internet__', target: '__router__', id: 'wan', rxRate: data.wanRx, txRate: data.wanTx, ltype: 'wan' },
+    ...satellites.map(n => ({
+      source: '__router__', target: meshNodeId(n.mac),
+      id: `mesh_${n.mac}`, rxRate: 0, txRate: 0, ltype: 'mesh'
+    })),
+    ...clients.map(c => {
+      const sat = satellites.find(n => n.mac === c.amesh_papMac);
+      const source = sat ? meshNodeId(sat.mac) : '__router__';
+      return { source, target: c.mac, id: c.mac, rxRate: c.rxRate, txRate: c.txRate, client: c, ltype: 'client' };
+    })
+  ];
+
+  // Stash org nodes/links before rebuilding (to preserve positions)
+  const savedOrgNodes = nodes.filter(n => n.type === 'org');
+  const newNodeIds = new Set(newNodes.map(n => n.id));
+  const savedOrgLinks = links
+    .filter(l => l.ltype === 'dev-org')
+    .map(l => ({ ...l,
+      source: typeof l.source === 'object' ? l.source.id : l.source,
+      target: typeof l.target === 'object' ? l.target.id : l.target,
+    }))
+    // Drop sources missing from new nodes (e.g. IP-based IDs from Yamaha-only mode)
+    .filter(l => newNodeIds.has(l.source));
+
+  const posMap = {};
+  nodes.forEach(n => posMap[n.id] = { x: n.x, y: n.y, vx: n.vx, vy: n.vy });
+  nodes = [...newNodes.map(n => posMap[n.id] ? { ...n, ...posMap[n.id] } : n), ...savedOrgNodes];
+  links = [...newLinks, ...savedOrgLinks];
+
+  updateSimulation(satellites);
+  updateSidePanel(clients, data, meshNodes, mainMac);
+  updateHeader(data);
+  updateFilterTabs(meshNodes, mainMac, clients);
+}
+
+function updateSimulation(satellites) {
+  if (!width) resize();
+  const cx = width / 2, cy = height / 2;
+  const internet = nodes.find(n => n.id === '__internet__');
+  const router = nodes.find(n => n.id === '__router__');
+  // Anchor router/internet nodes to the bottom
+  if (internet) { internet.fx = cx - 160; internet.fy = height * 0.82; }
+  if (router)   { router.fx  = cx;        router.fy  = height * 0.82; }
+
+  // Initial placement of satellites at the bottom (when not yet positioned)
+  satellites.forEach((sat, i) => {
+    const sn = nodes.find(n => n.id === meshNodeId(sat.mac));
+    if (sn && !sn.x) {
+      const angle = Math.PI + (i - (satellites.length-1)/2) * 0.4;
+      sn.x = cx + 160 * Math.cos(angle);
+      sn.y = height * 0.82 + 80 * Math.sin(angle);
+    }
+  });
+
+  // Target Y per node type
+  const targetY = d => {
+    if (d.type === 'org')    return height * 0.22; // destinations: top
+    if (d.type === 'client') return height * 0.72; // clients: bottom
+    return height * 0.78;                          // mesh etc.: lower
+  };
+  const strengthY = d => {
+    if (d.type === 'org')    return 0.15;
+    if (d.type === 'client') return 0.06;
+    return 0;
+  };
+
+  if (!simulation) {
+    simulation = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id)
+        .distance(d => d.ltype === 'mesh' ? 180 : d.ltype === 'dev-org' ? 260 : 110)
+        .strength(d => d.ltype === 'dev-org' ? 0.04 : 0.5))
+      .force('charge', d3.forceManyBody().strength(-250))
+      .force('collide', d3.forceCollide(38))
+      .force('x-center', d3.forceX(cx).strength(0.04))
+      .force('y-split',  d3.forceY(targetY).strength(strengthY))
+      .on('tick', ticked);
+  } else {
+    simulation.nodes(nodes);
+    simulation.force('link').links(links);
+    simulation.force('x-center', d3.forceX(cx).strength(0.04));
+    simulation.force('y-split',  d3.forceY(targetY).strength(strengthY));
+    simulation.alpha(0.4).restart();
+  }
+  drawLinks(); drawNodes(); applyGraphFilter();
+}
+
+function drawLinks() {
+  const link = linkGroup.selectAll('line').data(links, d => d.id);
+  link.enter().append('line')
+    .attr('marker-end', d => d.ltype === 'wan' ? 'url(#marker-router)' : d.ltype === 'mesh' ? 'url(#marker-meshnode)' : d.ltype === 'dev-org' ? 'url(#marker-org)' : 'url(#marker-client)')
+    .merge(link)
+    .attr('stroke-width', d => {
+      if (d.ltype === 'mesh') return 2;
+      if (d.ltype === 'dev-org') return Math.max(1, Math.min(5, 1 + Math.log((d.sessionCount || 1) + 1)));
+      const r = Math.max(d.rxRate || 0, d.txRate || 0);
+      return Math.max(1, Math.min(8, 1 + r / (maxRate / 7)));
+    })
+    .attr('stroke', d => {
+      if (d.ltype === 'mesh') return '#f97316';
+      if (d.ltype === 'dev-org') return '#7c3aed';
+      const r = Math.max(d.rxRate || 0, d.txRate || 0);
+      return r > maxRate * 0.5 ? '#ef4444' : r > maxRate * 0.1 ? '#f59e0b' : r > 0 ? '#3b82f6' : '#1f2937';
+    })
+    .attr('stroke-dasharray', d => d.ltype === 'mesh' ? '6,3' : d.ltype === 'dev-org' ? '4,3' : null)
+    .attr('opacity', d => d.ltype === 'mesh' ? 0.6 : d.ltype === 'dev-org' ? 0.45 : Math.max(d.rxRate || 0, d.txRate || 0) > 0 ? 0.9 : 0.35);
+  link.exit().remove();
+}
+
+function drawNodes() {
+  const node = nodeGroup.selectAll('g.node').data(nodes, d => d.id);
+  const entered = node.enter().append('g').attr('class', 'node')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (e, d) => { if (!d.fixed) { d.fx = e.x; d.fy = e.y; } })
+      .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); if (!d.fixed) { d.fx = null; d.fy = null; } })
+    )
+    .on('click', (e, d) => {
+      selectedMac = d.id === selectedMac ? null : d.id;
+      updateSideHighlight();
+      applyGraphFilter();
+      if (mapMode) updateMapDots();
+      if (statsMode) updateStats();
+      const selNode = nodes.find(n => n.id === selectedMac);
+      updateConnPanel(selNode?.client?.ip || null);
+    })
+    .on('mouseenter', showTooltip).on('mousemove', moveTooltip).on('mouseleave', hideTooltip);
+
+  const orgR = d => 13 + Math.min(9, Math.log((d.totalSessions || 1) + 1) * 2.5);
+
+  entered.append('circle')
+    .attr('r', d => d.type === 'router' ? 22 : d.type === 'internet' ? 18 : d.type === 'meshnode' ? 20 : d.type === 'org' ? orgR(d) : 16)
+    .attr('fill', d => {
+      if (d.type === 'router') return '#f59e0b';
+      if (d.type === 'internet') return '#374151';
+      if (d.type === 'meshnode') return '#f97316';
+      if (d.type === 'org') return '#3b0764';
+      return nodeColor(d.client?.type || '0');
+    })
+    .attr('stroke', d => {
+      if (d.type === 'router') return '#fbbf24';
+      if (d.type === 'internet') return '#6b7280';
+      if (d.type === 'meshnode') return '#fb923c';
+      if (d.type === 'org') return '#7c3aed';
+      return nodeColor(d.client?.type || '0');
+    })
+    .attr('stroke-width', 2).attr('fill-opacity', 0.85)
+    .attr('filter', d => (d.type === 'router' || d.type === 'meshnode') ? 'url(#glow)' : null);
+
+  entered.append('text')
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+    .attr('font-size', d => d.type === 'router' || d.type === 'meshnode' ? '14px' : d.type === 'org' ? '13px' : '12px').attr('fill', '#fff')
+    .text(d => d.type === 'router' ? '⬡' : d.type === 'meshnode' ? '⬡' : d.type === 'internet' ? '🌐' : d.type === 'org' ? (d.flag || '🌐') : isWiredType(d.client?.type) ? '🖥' : '📶');
+
+  entered.append('text').attr('class', 'node-label')
+    .attr('text-anchor', 'middle').attr('fill', '#e2e8f0')
+    .attr('font-size', '10px').attr('font-family', 'SF Mono,Fira Code,monospace');
+
+  nodeGroup.selectAll('g.node text.node-label').data(nodes, d => d.id)
+    .attr('dy', d => (d.type === 'router' || d.type === 'meshnode') ? 32 : d.type === 'org' ? orgR(d) + 12 : 28)
+    .text(d => {
+      if (d.type === 'router') return d.label || 'Router';
+      if (d.type === 'meshnode') return d.label || 'AiMesh';
+      if (d.type === 'internet') return 'Internet';
+      if (d.type === 'org') return d.label.length > 13 ? d.label.slice(0, 12) + '…' : d.label;
+      return d.label.length > 16 ? d.label.slice(0, 15) + '…' : d.label;
+    });
+  node.exit().remove();
+}
+
+function ticked() {
+  linkGroup.selectAll('line')
+    .attr('x1',d=>d.source.x).attr('y1',d=>d.source.y)
+    .attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+  nodeGroup.selectAll('g.node').attr('transform',d=>`translate(${d.x},${d.y})`);
+}
+
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
+const tooltip = document.getElementById('tooltip');
+function showTooltip(e, d) {
+  if (d.type === 'client' && d.client) {
+    const c = d.client;
+    const papNode = lastMeshNodes.find(n => n.mac === c.amesh_papMac);
+    const papLabel = papNode ? papNode.model : (c.amesh_papMac ? c.amesh_papMac : 'メインルーター');
+    tooltip.innerHTML = `
+      <div class="tooltip-name">${esc(c.name)}</div>
+      ${c.vendor ? `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">${esc(c.vendor)}</div>` : ''}
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.ip'))}</span><span class="tooltip-val">${esc(c.ip)}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.mac'))}</span><span class="tooltip-val">${esc(c.mac)}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.papNode'))}</span><span class="tooltip-val">${esc(papLabel)}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.type'))}</span><span class="tooltip-val">${esc(typeLabel(c.type))}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.rx'))}</span><span class="tooltip-val" style="color:#10b981">${esc(fmtBytes(c.rxRate))}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.tx'))}</span><span class="tooltip-val" style="color:#ef4444">${esc(fmtBytes(c.txRate))}</span></div>
+      ${c.rssi ? `<div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.rssi'))}</span><span class="tooltip-val">${esc(c.rssi)} dBm</span></div>` : ''}`;
+  } else if (d.type === 'router' || d.type === 'meshnode') {
+    const mn = d.meshNode;
+    tooltip.innerHTML = `
+      <div class="tooltip-name">${esc(mn?.model || 'Router')}</div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.ip'))}</span><span class="tooltip-val">${esc(mn?.ip || '')}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.mac'))}</span><span class="tooltip-val">${esc(mn?.mac || '')}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.role'))}</span><span class="tooltip-val">${esc(d.type === 'router' ? t('tt.role.main') : t('tt.role.mesh'))}</span></div>`;
+  } else if (d.type === 'org') {
+    tooltip.innerHTML = `
+      <div class="tooltip-name">${esc(d.flag || '🌐')} ${esc(d.label)}</div>
+      ${d.country ? `<div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.country'))}</span><span class="tooltip-val">${esc(d.country)}</span></div>` : ''}
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.sessions'))}</span><span class="tooltip-val">${esc(d.totalSessions)}</span></div>
+      <div class="tooltip-row"><span class="tooltip-key">${esc(t('tt.devices'))}</span><span class="tooltip-val">${esc(d.srcs.size)}</span></div>`;
+  } else {
+    tooltip.innerHTML = `<div class="tooltip-name">${esc(t('tt.internet'))}</div>`;
+  }
+  tooltip.style.display = 'block'; moveTooltip(e);
+}
+function moveTooltip(e) {
+  const r = document.getElementById('graph-container').getBoundingClientRect();
+  let x = e.clientX - r.left + 14, y = e.clientY - r.top - 10;
+  if (x + 250 > r.width) x = e.clientX - r.left - 260;
+  tooltip.style.left = x + 'px'; tooltip.style.top = y + 'px';
+}
+function hideTooltip() { tooltip.style.display = 'none'; }
+
+// ─── Side Panel ───────────────────────────────────────────────────────────────
+function updateFilterTabs(meshNodes, mainMac, clients) {
+  const tabs = document.getElementById('filter-tabs');
+  const counts = { all: clients.length };
+  meshNodes.forEach(n => {
+    counts[n.mac] = clients.filter(c => c.amesh_papMac === n.mac || (!c.amesh_papMac && n.mac === mainMac)).length;
+  });
+
+  // Rebuild tabs
+  tabs.innerHTML = '';
+  const addTab = (filter, label) => {
+    const btn = document.createElement('button');
+    btn.className = 'tab-btn' + (currentFilter === filter ? ' active' : '');
+    btn.dataset.filter = filter;
+    btn.textContent = `${label} (${counts[filter] ?? 0})`;
+    btn.addEventListener('click', () => {
+      currentFilter = filter;
+      tabs.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === filter));
+      applyFilter(clients);
+    });
+    tabs.appendChild(btn);
+  };
+  addTab('all', '全て');
+  meshNodes.forEach(n => addTab(n.mac, n.model || 'Node'));
+}
+
+function applyFilter(clients) {
+  const list = document.getElementById('device-list');
+  const searchRaw = (document.getElementById('device-search-input')?.value || '').trim().toLowerCase();
+  list.querySelectorAll('.device-card').forEach(el => {
+    const mac = el.dataset.mac;
+    const c = clients.find(c => c.mac === mac);
+    if (!c) return;
+    const filterNode = lastMeshNodes.find(n => n.mac === currentFilter);
+    const filterIsMain = filterNode?.ip === lastRouterIp;
+    const tabMatch = currentFilter === 'all'
+      || c.amesh_papMac === currentFilter
+      || (filterIsMain && !c.amesh_papMac);
+    const searchMatch = !searchRaw
+      || (c.name || '').toLowerCase().includes(searchRaw)
+      || (c.ip   || '').toLowerCase().includes(searchRaw)
+      || (c.mac  || '').toLowerCase().includes(searchRaw);
+    el.style.display = (tabMatch && searchMatch) ? '' : 'none';
+  });
+}
+
+function updateSidePanel(clients, data, meshNodes, mainMac) {
+  clients.forEach(c => { const r = Math.max(c.rxRate, c.txRate); if (r > maxRate) maxRate = r * 1.2; });
+  const list = document.getElementById('device-list');
+  const existing = {};
+  list.querySelectorAll('.device-card').forEach(el => existing[el.dataset.mac] = el);
+  const seen = new Set();
+
+  clients.sort((a, b) => (b.rxRate + b.txRate) - (a.rxRate + a.txRate)).forEach(c => {
+    seen.add(c.mac);
+    const papNode = meshNodes.find(n => n.mac === c.amesh_papMac);
+    const nodeColor = meshColorMap[c.amesh_papMac] || '#6b7280';
+    let card = existing[c.mac];
+    if (!card) {
+      card = document.createElement('div');
+      card.className = `device-card ${nodeClass(c.type)}`;
+      card.dataset.mac = c.mac;
+      card.innerHTML = `
+        <div style="display:flex;align-items:center;gap:4px">
+          <div class="device-title" style="flex:1"></div>
+          <span class="device-note-edit" title="${esc(t('note.edit.tip'))}">📝</span>
+          <span class="node-badge" style="background:${nodeColor}22;color:${nodeColor};border:1px solid ${nodeColor}44"></span>
+        </div>
+        <div class="device-name empty"></div>
+        <div class="device-meta empty"></div>
+        <div class="device-resolved empty"></div>
+        <div class="device-note empty"></div>
+        <div class="device-traffic">
+          <span class="traffic-pill rx">↓ <span class="rx-val"></span></span>
+          <span class="traffic-pill tx">↑ <span class="tx-val"></span></span>
+        </div>
+        <div style="margin-top:6px">
+          <div class="traffic-bar"><div class="traffic-bar-fill rx" style="width:0%"></div></div>
+          <div class="traffic-bar" style="margin-top:3px"><div class="traffic-bar-fill tx" style="width:0%"></div></div>
+        </div>`;
+      card.addEventListener('click', () => {
+        selectedMac = c.mac === selectedMac ? null : c.mac;
+        updateSideHighlight();
+        applyGraphFilter();
+        if (mapMode) updateMapDots();
+        if (statsMode) updateStats();
+        updateConnPanel(selectedMac ? c.ip : null);
+      });
+      // Only the edit-icon click opens the edit modal
+      card.querySelector('.device-note-edit').addEventListener('click', (e) => {
+        e.stopPropagation();
+        openNoteModal(c.ip, c.mac, c.name || c.ip);
+      });
+      // Clicks on the note body do NOT trigger card selection (preserves scroll)
+      card.querySelector('.device-note').addEventListener('click', (e) => e.stopPropagation());
+      list.appendChild(card);
+    }
+    // Note display (ip+mac composite key) — edit only via 📝 icon; body is read-only (3-line scroll)
+    const noteText = lookupNote(c.ip, c.mac);
+    const noteEl = card.querySelector('.device-note');
+    if (noteEl) {
+      if (noteText) {
+        noteEl.textContent = noteText;
+        noteEl.className = 'device-note';
+      } else {
+        noteEl.textContent = '';
+        noteEl.className = 'device-note empty';
+      }
+    }
+    // Title: IP / MAC (IP only when MAC is missing or equals IP)
+    const macKnown = c.mac && c.mac !== c.ip;
+    card.querySelector('.device-title').textContent = macKnown ? `${c.ip} / ${c.mac}` : c.ip;
+    // Name (shown only when different from IP, dedupe)
+    const nameEl = card.querySelector('.device-name');
+    if (c.name && c.name !== c.ip) {
+      nameEl.textContent = c.name;
+      nameEl.className = 'device-name';
+    } else {
+      nameEl.textContent = '';
+      nameEl.className = 'device-name empty';
+    }
+    // Meta: OUI vendor · connection type
+    const metaEl = card.querySelector('.device-meta');
+    const metaParts = [c.vendor, typeLabel(c.type)].filter(Boolean);
+    if (metaParts.length) {
+      metaEl.textContent = metaParts.join(' · ');
+      metaEl.className = 'device-meta';
+    } else {
+      metaEl.textContent = '';
+      metaEl.className = 'device-meta empty';
+    }
+    // Name resolution: DNS / mDNS (omit if same as already-known name)
+    const resolvedEl = card.querySelector('.device-resolved');
+    const known = new Set([c.name, c.ip].filter(Boolean));
+    const resolvedParts = [];
+    if (c.dnsName  && !known.has(c.dnsName))  resolvedParts.push('DNS: '  + c.dnsName);
+    if (c.mdnsName && !known.has(c.mdnsName) && c.mdnsName !== c.dnsName) resolvedParts.push('mDNS: ' + c.mdnsName);
+    if (resolvedParts.length) {
+      resolvedEl.textContent = resolvedParts.join(' · ');
+      resolvedEl.className = 'device-resolved';
+    } else {
+      resolvedEl.textContent = '';
+      resolvedEl.className = 'device-resolved empty';
+    }
+    card.querySelector('.node-badge').textContent = papNode?.model?.replace(/RT-BE/,'') || 'Main';
+    card.querySelector('.node-badge').style.background = nodeColor + '22';
+    card.querySelector('.node-badge').style.color = nodeColor;
+    card.querySelector('.rx-val').textContent = fmtBytes(c.rxRate);
+    card.querySelector('.tx-val').textContent = fmtBytes(c.txRate);
+    const rxPct = Math.min(100, (c.rxRate / maxRate) * 100);
+    const txPct = Math.min(100, (c.txRate / maxRate) * 100);
+    card.querySelectorAll('.traffic-bar-fill')[0].style.width = rxPct + '%';
+    card.querySelectorAll('.traffic-bar-fill')[1].style.width = txPct + '%';
+  });
+  Object.keys(existing).forEach(mac => { if (!seen.has(mac)) existing[mac].remove(); });
+  applyFilter(clients);
+
+  const wMax = Math.max(maxRate, data.wanRx, data.wanTx, 1);
+  document.getElementById('wan-rx-label').textContent = fmtBytes(data.wanRx);
+  document.getElementById('wan-tx-label').textContent = fmtBytes(data.wanTx);
+  document.getElementById('wan-rx-bar').style.width = Math.min(100, (data.wanRx / wMax) * 100) + '%';
+  document.getElementById('wan-tx-bar').style.width = Math.min(100, (data.wanTx / wMax) * 100) + '%';
+  updateSideHighlight();
+}
+function updateSideHighlight() {
+  document.querySelectorAll('.device-card').forEach(el => el.classList.toggle('selected', el.dataset.mac === selectedMac));
+}
+
+function applyGraphFilter() {
+  if (!simulation) return;
+
+  const sel = selectedMac;
+  const selNode = sel ? nodes.find(n => n.id === sel) : null;
+  const searchRaw = (document.getElementById('device-search-input')?.value || '').trim().toLowerCase();
+
+  // ── No filter ──────────────────────────────────────────────
+  if (!sel && !searchRaw) {
+    nodeGroup.selectAll('g.node').style('opacity', null).style('pointer-events', null);
+    linkGroup.selectAll('line').style('opacity', null);
+    return;
+  }
+
+  // Infrastructure nodes (always shown)
+  const infraIds = new Set([
+    '__internet__', '__router__',
+    ...nodes.filter(n => n.type === 'meshnode').map(n => n.id),
+  ]);
+
+  // ── Client selected → selection filter has priority ────────
+  if (sel && selNode && selNode.type === 'client') {
+    const orgIds = orgIdsOf(new Set([sel]));
+    const visibleIds = new Set([...infraIds, sel, ...orgIds]);
+
+    nodeGroup.selectAll('g.node')
+      .style('opacity', d => visibleIds.has(d.id) ? 1 : 0.07)
+      .style('pointer-events', d => visibleIds.has(d.id) ? 'all' : 'none');
+
+    linkGroup.selectAll('line').style('opacity', d => {
+      const src = typeof d.source === 'object' ? d.source.id : d.source;
+      const tgt = typeof d.target === 'object' ? d.target.id : d.target;
+      if (d.ltype === 'wan')  return 0.4;
+      if (d.ltype === 'mesh') return 0.3;
+      if (src === sel || tgt === sel) return 0.9;
+      return 0.04;
+    });
+    return;
+  }
+
+  // ── Search text present → search filter ──────────────────
+  if (searchRaw) {
+    const matchedIds = new Set(
+      nodes
+        .filter(n => {
+          if (n.type !== 'client') return false;
+          return (n.client?.name || '').toLowerCase().includes(searchRaw)
+            || (n.client?.ip   || '').toLowerCase().includes(searchRaw)
+            || (n.id           || '').toLowerCase().includes(searchRaw);
+        })
+        .map(n => n.id)
+    );
+    const orgIds = orgIdsOf(matchedIds);
+    const visibleIds = new Set([...infraIds, ...matchedIds, ...orgIds]);
+
+    nodeGroup.selectAll('g.node')
+      .style('opacity', d => visibleIds.has(d.id) ? 1 : 0.07)
+      .style('pointer-events', d => visibleIds.has(d.id) ? 'all' : 'none');
+
+    linkGroup.selectAll('line').style('opacity', d => {
+      const src = typeof d.source === 'object' ? d.source.id : d.source;
+      const tgt = typeof d.target === 'object' ? d.target.id : d.target;
+      if (d.ltype === 'wan')  return 0.4;
+      if (d.ltype === 'mesh') return 0.3;
+      if (matchedIds.has(src) || matchedIds.has(tgt)) return 0.8;
+      return 0.04;
+    });
+    return;
+  }
+
+  // sel is set but not a client (router etc.) → no filter
+  nodeGroup.selectAll('g.node').style('opacity', null).style('pointer-events', null);
+  linkGroup.selectAll('line').style('opacity', null);
+}
+
+// Return org node IDs that the given set of client IDs connects to
+function orgIdsOf(clientIdSet) {
+  return new Set(
+    links
+      .filter(l => {
+        const src = typeof l.source === 'object' ? l.source.id : l.source;
+        return l.ltype === 'dev-org' && clientIdSet.has(src);
+      })
+      .map(l => typeof l.target === 'object' ? l.target.id : l.target)
+  );
+}
+function updateHeader(data) {
+  document.getElementById('hdr-devices').textContent = (data.clients||[]).length;
+  document.getElementById('hdr-wan-rx').textContent = fmtBytes(data.wanRx);
+  document.getElementById('hdr-wan-tx').textContent = fmtBytes(data.wanTx);
+  document.getElementById('last-update').textContent = t('last-update.prefix') + new Date(data.timestamp).toLocaleTimeString();
+}
+
+// ─── Connections panel ────────────────────────────────────────────────────────
+let allConnections = [];
+let serverTimeOffset = 0; // diff between client and server clocks (ms)
+let currentTimeFilter = '1h';
+
+// Period filter: returns [from, to] against lastSeen (null = no limit)
+let customRangeFrom = null; // ms (for custom filter)
+let customRangeTo   = null;
+function getTimeRange() {
+  const now = Date.now() + serverTimeOffset; // server time basis
+  switch (currentTimeFilter) {
+    // Live: sessions observed within the last 15 min (matches Yamaha NAT default TTL=15min)
+    case 'live':      return { from: now - 15 * 60_000,   to: null };
+    case '1h':        return { from: now - 3600_000,      to: null };
+    case '3h':        return { from: now - 3 * 3600_000,  to: null };
+    case '6h':        return { from: now - 6 * 3600_000,  to: null };
+    case '12h':       return { from: now - 12 * 3600_000, to: null };
+    case '24h':       return { from: now - 86400_000,     to: null };
+    case '7d':        return { from: now - 604800_000,    to: null };
+    case 'today': {
+      const d = new Date(now); d.setHours(0,0,0,0);
+      return { from: d.getTime(), to: null };
+    }
+    case 'yesterday': {
+      const d = new Date(now); d.setHours(0,0,0,0);
+      return { from: d.getTime() - 86400_000, to: d.getTime() };
+    }
+    case 'custom':    return { from: customRangeFrom, to: customRangeTo };
+    case 'all':       return { from: null, to: null };
+    default:          return { from: null, to: null };
+  }
+}
+function getFilteredConnections() {
+  const { from, to, minTtl = 0 } = getTimeRange();
+  return allConnections.filter(c => {
+    // 'live' means 'currently active' → judge by lastSeen + TTL
+    // Others mean 'connections newly seen during the period' → judge by firstSeen
+    const t = currentTimeFilter === 'live'
+      ? (c.lastSeen  || 0)
+      : (c.firstSeen || c.lastSeen || 0);
+    if (from !== null && t < from) return false;
+    if (to   !== null && t > to)   return false;
+    if (minTtl && (c.ttl || 0) < minTtl) return false;
+    return true;
+  });
+}
+
+function updateConnPanel(selectedIp) {
+  const panel = document.getElementById('conn-panel');
+  const list  = document.getElementById('conn-list');
+  const title = document.getElementById('conn-panel-title');
+  const count = document.getElementById('conn-count');
+
+  if (!selectedIp) { panel.style.display = 'none'; return; }
+
+  const conns = getFilteredConnections().filter(c => c.src === selectedIp);
+  panel.style.display = 'flex';
+  title.textContent = `${t('panel.conn')} — ${selectedIp}`;
+  count.textContent = conns.length ? `${conns.length} ${t('panel.conn.session')}` : '';
+
+  if (!conns.length) {
+    list.innerHTML = `<div class="conn-empty">${esc(t('panel.conn.empty'))}</div>`;
+    return;
+  }
+
+  // Group by destination host
+  const byHost = new Map();
+  for (const c of conns) {
+    const key = `${c.dstHost}:${c.dport}`;
+    if (!byHost.has(key)) byHost.set(key, { ...c, count: 0 });
+    byHost.get(key).count++;
+  }
+
+  list.innerHTML = [...byHost.values()]
+    .sort((a, b) => b.count - a.count)
+    .map(c => {
+      const label   = c.dstHost !== c.dst ? c.dstHost : c.dst;
+      const port    = c.dport === 443 ? 'HTTPS' : c.dport === 80 ? 'HTTP' : `:${c.dport}`;
+      const cnt     = c.count > 1 ? ` ×${c.count}` : '';
+      const flag    = (c.country && c.country.length === 2)
+        ? String.fromCodePoint(0x1F1E0 + c.country.charCodeAt(0) - 65, 0x1F1E0 + c.country.charCodeAt(1) - 65)
+        : '';
+      const rdapStr = (flag || c.org) ? `${flag} ${c.org || c.country || ''}`.trim() : '';
+      const rdapLine = rdapStr ? `<span class="conn-rdap">${esc(rdapStr)}</span>` : '';
+      return `<div class="conn-row">
+        <span class="conn-proto">${esc(c.proto)}</span>
+        <span class="conn-host" title="${esc(c.dst)}:${esc(c.dport)}">
+          <span class="conn-hostname">${esc(label)}</span>${rdapLine}
+        </span>
+        <span class="conn-port">${esc(port)}${esc(cnt)}</span>
+      </div>`;
+    }).join('');
+}
+
+// ─── Socket.IO ────────────────────────────────────────────────────────────────
+// ─── Admin token auth (saved in localStorage) ─────────────────────────
+const TOKEN_KEY = 'widemap_admin_token';
+let adminToken = localStorage.getItem(TOKEN_KEY) || '';
+async function promptAdminToken(reason = '') {
+  while (true) {
+    // ⚠️ Local var name conflicts with the t() function, so use "tok"
+    const tok = prompt((reason ? reason + '\n\n' : '') + t('prompt.token'));
+    if (tok === null) { alert(t('alert.tokenRequired')); continue; }
+    try {
+      const r = await fetch('__BASE__/api/admin/verify', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: tok }),
+      });
+      if (r.ok) {
+        adminToken = tok;
+        localStorage.setItem(TOKEN_KEY, tok);
+        return;
+      }
+      alert(t('err.tokenInvalid'));
+    } catch (e) {
+      alert(t('err.serverGeneric') + e.message);
+    }
+  }
+}
+// On startup, show dialog if no saved token
+// Apply i18n once on startup (default 'ja' before config arrives) as a safeguard
+applyI18n();
+if (!adminToken) {
+  promptAdminToken().then(() => location.reload());
+}
+
+// Wrapper that auto-adds the token header to every fetch
+async function apiFetch(url, opts = {}) {
+  const headers = { ...(opts.headers || {}), 'X-Admin-Token': adminToken };
+  const res = await fetch(url, { ...opts, headers });
+  if (res.status === 401) {
+    // Token expired or mis-entered
+    localStorage.removeItem(TOKEN_KEY);
+    adminToken = '';
+    await promptAdminToken('トークンが拒否されました。再入力してください。');
+    return apiFetch(url, opts); // retry
+  }
+  return res;
+}
+
+const socket = io({ path: '__BASE__/socket.io/', auth: { token: adminToken } });
+socket.on('connect_error', err => {
+  if (String(err.message).toLowerCase().includes('unauth')) {
+    localStorage.removeItem(TOKEN_KEY);
+    adminToken = '';
+    promptAdminToken('WebSocket認証エラー。トークンを再入力してください。')
+      .then(() => location.reload());
+  }
+});
+const dot = document.getElementById('status-dot');
+const errorBanner = document.getElementById('error-banner');
+
+socket.on('connect', () => { dot.className = 'status-dot online'; errorBanner.style.display = 'none'; });
+socket.on('disconnect', () => { dot.className = 'status-dot error'; });
+
+let asusActive      = false; // becomes true upon receiving network-update
+let yamahaConfigured = true; // mirrors the server-side yamahaEnabled state
+let notesMap = {}; // { "ip|mac" or "ip" or "mac": "note" }
+
+// Re-render the note display of every device card (after note save / notes-update)
+function refreshAllNotes() {
+  document.querySelectorAll('.device-card').forEach(card => {
+    const mac = card.dataset.mac;
+    const c = (lastClients || []).find(c => c.mac === mac);
+    if (!c) return;
+    const noteText = lookupNote(c.ip, c.mac);
+    const noteEl = card.querySelector('.device-note');
+    if (!noteEl) return;
+    if (noteText) {
+      noteEl.textContent = noteText;
+      noteEl.className = 'device-note';
+    } else {
+      noteEl.textContent = '';
+      noteEl.className = 'device-note empty';
+    }
+  });
+}
+
+// Look up a note using both IP and MAC (handles DHCP/MAC-randomisation)
+function lookupNote(ip, mac) {
+  if (ip && mac && notesMap[`${ip}|${mac}`]) return notesMap[`${ip}|${mac}`];
+  // Search entries that match by only one of ip/mac
+  for (const k of Object.keys(notesMap)) {
+    const [kip, kmac] = k.split('|');
+    if (ip && kip === ip)  return notesMap[k];
+    if (mac && (kmac === mac || (!kmac && kip === mac))) return notesMap[k];
+  }
+  return '';
+}
+
+// ── Note modal ─────────────────────────────────────────────────
+let noteEditIp = null;
+let noteEditMac = null;
+const noteOverlay = document.getElementById('note-overlay');
+function openNoteModal(ip, mac, displayName) {
+  noteEditIp = ip;
+  noteEditMac = mac;
+  const idLabel = [ip, mac].filter(Boolean).join(' / ');
+  document.getElementById('note-target').textContent = `${displayName || ''} (${idLabel})`;
+  const ta = document.getElementById('note-textarea');
+  ta.value = lookupNote(ip, mac);
+  ta.placeholder = t('note.placeholder');
+  noteOverlay.classList.remove('hidden');
+  setTimeout(() => ta.focus(), 50);
+}
+function closeNoteModal() {
+  noteOverlay.classList.add('hidden');
+  noteEditIp = null;
+  noteEditMac = null;
+}
+noteOverlay.addEventListener('click', e => { if (e.target === noteOverlay) closeNoteModal(); });
+document.getElementById('note-cancel').addEventListener('click', closeNoteModal);
+document.getElementById('note-save').addEventListener('click', async () => {
+  if (!noteEditIp && !noteEditMac) return;
+  const note = document.getElementById('note-textarea').value;
+  try {
+    await apiFetch('__BASE__/api/notes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: noteEditIp, mac: noteEditMac, note }),
+    });
+    // Update local state too (server also broadcasts)
+    const key = (noteEditIp && noteEditMac) ? `${noteEditIp}|${noteEditMac}`
+              : noteEditIp || noteEditMac;
+    // Clean up related existing entries before writing
+    for (const k of Object.keys(notesMap)) {
+      const [kip, kmac] = k.split('|');
+      if ((noteEditIp && kip === noteEditIp) || (noteEditMac && (kmac === noteEditMac || kip === noteEditMac))) {
+        delete notesMap[k];
+      }
+    }
+    if (note.trim()) notesMap[key] = note.trim();
+    refreshAllNotes();
+    closeNoteModal();
+  } catch (e) {
+    alert(t('err.serverGeneric') + e.message);
+  }
+});
+document.getElementById('note-investigate-btn').addEventListener('click', async () => {
+  if (!noteEditIp) {
+    alert('IP アドレスがないため調査できません');
+    return;
+  }
+  const btn = document.getElementById('note-investigate-btn');
+  const orig = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = t('note.investigating');
+  try {
+    const r = await apiFetch('__BASE__/api/notes/draft', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: noteEditIp }),
+    });
+    const data = await r.json();
+    const ta = document.getElementById('note-textarea');
+    const sep = ta.value ? '\n---\n' : '';
+    ta.value = ta.value + sep + (data.draft || '(no info)');
+  } catch (e) {
+    alert(t('note.investigate.fail') + ': ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+});
+
+// ── Connection badge management ────────────────────────────
+const connState = {
+  l3l4: { enabled: false, ready: false, ip: '', err: '' },
+  l2:   { enabled: false, ready: false, ip: '', err: '' },
+};
+function updateConnBadge(key) {
+  const s = connState[key];
+  const badge = document.getElementById('badge-' + key);
+  const ipEl  = document.getElementById('badge-' + key + '-ip');
+  const prefix = (key === 'l3l4' ? 'L3/L4 Yamaha' : 'L2 ASUS');
+  badge.classList.remove('on', 'off', 'err');
+  if (!s.enabled) {
+    badge.classList.add('off');
+    ipEl.textContent = t('badge.unused');
+    badge.title = prefix + ' — ' + t('badge.unused');
+  } else if (s.ready) {
+    badge.classList.add('on');
+    ipEl.textContent = s.ip || t('badge.ready');
+    badge.title = prefix + ' — ' + t('badge.ready') + ' ' + (s.ip || '');
+  } else {
+    badge.classList.add('err');
+    // s.err is an internal state string; translate for display
+    const errLabel = s.err === 'セッション切れ' ? t('badge.timeout')
+                   : s.err === '失敗'           ? t('badge.error')
+                   : s.err || t('badge.waiting');
+    ipEl.textContent = errLabel;
+    badge.title = prefix + ' — ' + errLabel;
+  }
+}
+
+socket.on('config', cfg => {
+  if (cfg.routerIp)   document.getElementById('s-asus-ip').value       = cfg.routerIp;
+  if (cfg.asusUser)   document.getElementById('s-asus-user').value     = cfg.asusUser;
+  if (cfg.yamahaIp)   document.getElementById('s-yamaha-ip').value     = cfg.yamahaIp;
+  if (cfg.yamahaUser) document.getElementById('s-yamaha-user').value   = cfg.yamahaUser;
+  // Passwords are not sent in plaintext for security; show "saved" placeholder instead
+  const asusPwEl = document.getElementById('s-asus-pass');
+  asusPwEl.placeholder = cfg.asusPassSet ? t('settings.pass.saved') : t('settings.pass.empty');
+  const yamahaPwEl = document.getElementById('s-yamaha-pass');
+  yamahaPwEl.placeholder = cfg.yamahaPassSet ? t('settings.pass.saved') : t('settings.pass.empty');
+  if (cfg.yamahaEnabled !== undefined) {
+    yamahaConfigured = cfg.yamahaEnabled;
+    document.getElementById('enable-yamaha').checked = yamahaConfigured;
+    toggleSection('yamaha-inputs', 'enable-yamaha', 'yamaha-connect-btn');
+    connState.l3l4.enabled = cfg.yamahaEnabled;
+    connState.l3l4.ready   = !!cfg.yamahaReady;
+    connState.l3l4.ip      = cfg.yamahaIp || '';
+    updateConnBadge('l3l4');
+  }
+  if (cfg.asusEnabled !== undefined) {
+    document.getElementById('enable-asus').checked = cfg.asusEnabled;
+    toggleSection('asus-inputs', 'enable-asus', 'asus-connect-btn');
+    connState.l2.enabled = cfg.asusEnabled;
+    connState.l2.ready   = !!cfg.authenticated;
+    connState.l2.ip      = cfg.routerIp || '';
+    updateConnBadge('l2');
+  }
+  if (cfg.homeCountry) {
+    homeCountry = cfg.homeCountry;
+    document.getElementById('s-home-country').value = homeCountry;
+  }
+  if (cfg.notes) {
+    notesMap = cfg.notes;
+    refreshAllNotes();
+  }
+  if (typeof cfg.autoInvestigate === 'boolean') {
+    document.getElementById('s-auto-investigate').checked = cfg.autoInvestigate;
+  }
+  if (cfg.language && cfg.language !== currentLang) {
+    currentLang = cfg.language;
+    document.getElementById('s-language').value = currentLang;
+    applyI18n();
+    // Re-render dynamic UI (existing badges/statuses) too
+    Object.keys(connState).forEach(updateConnBadge);
+  } else if (cfg.language) {
+    document.getElementById('s-language').value = cfg.language;
+  }
+  if (cfg.asusEnabled && !cfg.authenticated) {
+    document.getElementById('disconnected-banner').style.display = 'block';
+    settingsBtn.classList.add('alert');
+  }
+});
+
+// Save general settings
+document.getElementById('general-save-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('general-save-btn');
+  const newCountry = document.getElementById('s-home-country').value;
+  const newLang    = document.getElementById('s-language').value;
+  const newAuto    = document.getElementById('s-auto-investigate').checked;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>' + t('settings.btn.saving');
+  try {
+    const res = await apiFetch('__BASE__/api/config/general', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ homeCountry: newCountry, language: newLang, autoInvestigate: newAuto }),
+    });
+    if (res.ok) {
+      homeCountry = newCountry;
+      if (newLang !== currentLang) {
+        currentLang = newLang;
+        applyI18n();
+        Object.keys(connState).forEach(updateConnBadge);
+        // Re-render stats if shown (to update legend labels)
+        if (statsMode) updateStats();
+      }
+      showStatus('general-status', t('settings.status.saved'), true);
+      // Re-render map if shown
+      if (mapMode && worldGeo) { stopMapAnim(); renderWorldMap(); updateMapDots(); startMapAnim(); }
+    } else {
+      showStatus('general-status', '保存失敗', false);
+    }
+  } catch (e) {
+    showStatus('general-status', 'エラー: ' + e.message, false);
+  } finally {
+    btn.disabled = false; btn.textContent = t('settings.btn.save');
+  }
+});
+
+socket.on('auth-required', () => {
+  document.getElementById('disconnected-banner').style.display = 'block';
+  settingsBtn.classList.add('alert');
+  connState.l2.ready = false;
+  connState.l2.err   = 'セッション切れ';
+  updateConnBadge('l2');
+  if (asusActive) {
+    stopGraph();
+    asusActive = false; // ← subsequent connections-updates are treated as Yamaha-only mode
+    // If Yamaha is enabled, rebuild using synthetic clients
+    if (yamahaConfigured && allConnections.length) buildGraphFromConnections();
+  }
+});
+
+socket.on('yamaha-status', s => {
+  showStatus('yamaha-status', s.message, s.ready);
+  connState.l3l4.enabled = yamahaConfigured;
+  connState.l3l4.ready   = s.ready;
+  connState.l3l4.err     = s.ready ? '' : '失敗';
+  updateConnBadge('l3l4');
+  if (!s.ready && yamahaConfigured && !asusActive) {
+    const banner = document.getElementById('disconnected-banner');
+    banner.style.display = 'block';
+    banner.querySelector('button').textContent = t('banner.yamaha');
+  }
+  if (s.ready) {
+    document.getElementById('disconnected-banner').style.display = 'none';
+    settingsBtn.classList.remove('alert');
+  }
+});
+
+socket.on('notes-update', data => {
+  if (data?.notes) notesMap = data.notes;
+  refreshAllNotes();
+});
+
+socket.on('network-update', data => {
+  asusActive = true;
+  errorBanner.style.display = 'none';
+  connState.l2.enabled = true;
+  connState.l2.ready   = true;
+  connState.l2.err     = '';
+  if (data.routerIp) connState.l2.ip = data.routerIp;
+  updateConnBadge('l2');
+  buildGraph(data);
+});
+
+// Yamaha-only mode: build the graph treating src IPs as clients
+function buildGraphFromConnections() {
+  // Do not early-return: still call buildGraph with empty arrays to clear the graph
+  const filtered = getFilteredConnections();
+  const srcCounts = new Map();
+  const srcMeta   = new Map(); // ip → {mac, vendor, dnsName, mdnsName}
+  for (const c of filtered) {
+    srcCounts.set(c.src, (srcCounts.get(c.src) || 0) + 1);
+    if (!srcMeta.has(c.src) && (c.srcMac || c.srcVendor || c.srcDnsName || c.srcMdnsName)) {
+      srcMeta.set(c.src, {
+        mac: c.srcMac, vendor: c.srcVendor, dnsName: c.srcDnsName, mdnsName: c.srcMdnsName,
+      });
+    }
+  }
+  const syntheticClients = [...srcCounts.keys()].map(ip => {
+    const m = srcMeta.get(ip) || {};
+    return {
+      mac: m.mac || ip, ip, name: ip, type: '0',
+      rxRate: 0, txRate: 0, rssi: null, amesh_papMac: null,
+      vendor: m.vendor || '', dnsName: m.dnsName || null, mdnsName: m.mdnsName || null,
+    };
+  });
+  buildGraph({
+    clients: syntheticClients, satellites: [], meshNodes: [],
+    wanRx: 0, wanTx: 0, routerIp: null, timestamp: Date.now(),
+  });
+  updateOrgGraph();
+}
+
+function updateOrgGraph() {
+  if (!simulation) return; // skip if simulation not yet initialised
+  if (!simulation) return;
+
+  // Stash existing org nodes/links (preserve positions) then remove them
+  const orgPosMap = {};
+  nodes.forEach(n => { if (n.type === 'org') orgPosMap[n.id] = { x: n.x, y: n.y, vx: n.vx||0, vy: n.vy||0 }; });
+  nodes = nodes.filter(n => n.type !== 'org');
+  links = links.filter(l => l.ltype !== 'dev-org');
+
+  // Aggregate destinations per org (after period filter is applied)
+  // Drop sessions without lat/lon → make this exactly match the map display
+  const orgMap = new Map();
+  for (const c of getFilteredConnections()) {
+    if (c.lat == null || c.lon == null) continue;
+    const key = c.org || c.dst;
+    const label = c.org || (c.dstHost !== c.dst ? c.dstHost : c.dst);
+    if (!orgMap.has(key)) orgMap.set(key, { id: `__org__:${key}`, type: 'org', label, flag: flagEmoji(c.country), country: c.country, srcs: new Map() });
+    const e = orgMap.get(key);
+    e.srcs.set(c.src, (e.srcs.get(c.src) || 0) + 1);
+  }
+  const orgList = [...orgMap.values()]
+    .map(e => ({ ...e, totalSessions: [...e.srcs.values()].reduce((a,b)=>a+b,0) }))
+    .sort((a,b) => b.totalSessions - a.totalSessions);
+
+  // Add org nodes (prefer existing positions, otherwise evenly around the perimeter)
+  const cx = width / 2, cy = height / 2;
+  const r0 = Math.min(cx, cy) * 0.75;
+  const newOrgNodes = orgList.map((o, i) => {
+    const pos = orgPosMap[o.id];
+    if (pos) return { ...o, ...pos };
+    const angle = (2 * Math.PI * i) / Math.max(orgList.length, 1);
+    return { ...o, x: cx + r0 * Math.cos(angle), y: cy + r0 * Math.sin(angle) };
+  });
+  nodes = [...nodes, ...newOrgNodes];
+
+  // Device → org links (find device node by IP)
+  const clientByIp = {};
+  nodes.forEach(n => { if (n.type === 'client' && n.client?.ip) clientByIp[n.client.ip] = n.id; });
+  for (const o of newOrgNodes) {
+    for (const [srcIp, count] of o.srcs) {
+      const srcId = clientByIp[srcIp];
+      if (srcId) links.push({ source: srcId, target: o.id, id: `dev-org:${srcId}:${o.id}`, ltype: 'dev-org', sessionCount: count, rxRate: 0, txRate: 0 });
+    }
+  }
+
+  simulation.nodes(nodes);
+  simulation.force('link').links(links);
+  simulation.force('x-center', d3.forceX(cx).strength(0.04));
+  simulation.force('y-split',  d3.forceY(d => d.type === 'org' ? height * 0.22 : height * 0.72).strength(d => d.type === 'org' ? 0.15 : 0.06));
+  simulation.alpha(0.3).restart();
+  drawLinks();
+  drawNodes();
+  applyGraphFilter();
+}
+
+socket.on('connections-update', data => {
+  if (!yamahaConfigured) return; // do nothing while Yamaha is disabled
+  allConnections = data.connections || [];
+  if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
+  if (!asusActive) {
+    buildGraphFromConnections(); // Yamaha-only: render src IPs as devices
+  } else {
+    updateOrgGraph();
+  }
+  if (mapMode) updateMapDots();
+  if (statsMode) updateStats();
+  // Immediately update the panel for the currently selected device
+  const selNode = nodes.find(n => n.id === selectedMac);
+  const selIp   = selNode?.client?.ip || null;
+  updateConnPanel(selIp);
+});
+
+socket.on('poll-error', err => {
+  errorBanner.textContent = 'ポーリングエラー: ' + err.message;
+  errorBanner.style.display = 'block';
+});
+
+function stopGraph() {
+  if (simulation) { simulation.stop(); simulation = null; }
+  nodes = []; links = [];
+  linkGroup.selectAll('*').remove();
+  nodeGroup.selectAll('*').remove();
+  // Clear ASUS-derived caches too (prevents stale mesh-badge display)
+  lastMeshNodes = [];
+  lastSatellites = [];
+  lastClients = [];
+  meshColorMap = {};
+  document.getElementById('device-list').innerHTML = '';
+  document.getElementById('conn-panel').style.display = 'none';
+}
+
+// ─── World Map ────────────────────────────────────────────────────────────────
+let worldGeo = null;
+let mapSvg = null, mapG = null, mapProjection = null, mapPath = null;
+let mapMode = false;
+let currentMapK = 1;
+let mapParticles = [];
+let mapAnimId = null;
+let homeCountry = 'JP'; // configurable
+
+// Per-country: capital / centre coordinates
+const COUNTRY_COORDS = {
+  JP:{ lat:35.68, lon:139.69 }, US:{ lat:38.89, lon:-77.04 }, CA:{ lat:45.42, lon:-75.69 },
+  GB:{ lat:51.50, lon:-0.12  }, DE:{ lat:52.52, lon:13.40  }, FR:{ lat:48.86, lon:2.35   },
+  IT:{ lat:41.90, lon:12.50  }, ES:{ lat:40.42, lon:-3.70  }, NL:{ lat:52.09, lon:5.10   },
+  SE:{ lat:59.33, lon:18.07  }, CH:{ lat:46.95, lon:7.45   }, NO:{ lat:59.91, lon:10.75  },
+  AU:{ lat:-35.28,lon:149.13 }, NZ:{ lat:-41.29,lon:174.78 }, CN:{ lat:39.91, lon:116.39 },
+  KR:{ lat:37.57, lon:126.98 }, TW:{ lat:25.04, lon:121.56 }, HK:{ lat:22.32, lon:114.17 },
+  SG:{ lat:1.35,  lon:103.82 }, IN:{ lat:28.61, lon:77.21  }, BR:{ lat:-15.79,lon:-47.88 },
+  RU:{ lat:55.75, lon:37.62  },
+};
+
+function getHomeCoord() {
+  return COUNTRY_COORDS[homeCountry] || COUNTRY_COORDS['JP'];
+}
+// Japan → centred on Japan; otherwise → centred on Greenwich
+function getMapRotation() {
+  return homeCountry === 'JP' ? [-140, 0] : [0, 0];
+}
+
+const mapTooltipEl = document.getElementById('map-tooltip');
+
+function showMapTooltip(event, d) {
+  const flag = d.country && d.country.length === 2
+    ? String.fromCodePoint(0x1F1E0 + d.country.charCodeAt(0) - 65, 0x1F1E0 + d.country.charCodeAt(1) - 65)
+    : '';
+  const stateColor = d.freshness >= 0.8 ? '#10b981' : d.freshness >= 0.4 ? '#f59e0b' : '#ef4444';
+  const stateLabel = d.freshness >= 0.8 ? t('maptt.state.active')
+                   : d.freshness >= 0.4 ? t('maptt.state.idle')
+                   : t('maptt.state.timeout');
+  mapTooltipEl.innerHTML = `
+    <div class="map-tooltip-name">${esc(d.org || d.key)}</div>
+    <div class="map-tooltip-row"><span class="map-tooltip-key">${esc(t('maptt.place'))}</span><span class="map-tooltip-val">${esc([d.city, flag].filter(Boolean).join(' '))}</span></div>
+    <div class="map-tooltip-row"><span class="map-tooltip-key">${esc(t('maptt.session'))}</span><span class="map-tooltip-val">${esc(d.totalSessions)}</span></div>
+    <div class="map-tooltip-row"><span class="map-tooltip-key">${esc(t('maptt.src'))}</span><span class="map-tooltip-val">${esc(d.srcs.size)} ${esc(t('maptt.devices'))}</span></div>
+    <div class="map-tooltip-row"><span class="map-tooltip-key">${esc(t('maptt.state'))}</span><span class="map-tooltip-val" style="color:${stateColor}">${stateLabel} (${esc(t('maptt.ttl.remain'))} ${esc(d.maxTtl)}s)</span></div>`;
+  mapTooltipEl.style.display = 'block';
+  moveMapTooltip(event);
+}
+function moveMapTooltip(event) {
+  const r = document.getElementById('map-container').getBoundingClientRect();
+  let x = event.clientX - r.left + 14, y = event.clientY - r.top - 10;
+  if (x + 230 > r.width) x = event.clientX - r.left - 240;
+  mapTooltipEl.style.left = x + 'px'; mapTooltipEl.style.top = y + 'px';
+}
+function hideMapTooltip() { mapTooltipEl.style.display = 'none'; }
+
+function buildMapPoints() {
+  const orgMap = new Map();
+  for (const c of getFilteredConnections()) {
+    if (c.lat == null || c.lon == null) continue;
+    const key = c.org || c.dst;
+    if (!orgMap.has(key)) orgMap.set(key, {
+      key, org: c.org || c.dstHost || c.dst,
+      lat: c.lat, lon: c.lon, city: c.city || '', country: c.country || '',
+      srcs: new Map(), maxTtl: 0,
+    });
+    const e = orgMap.get(key);
+    e.srcs.set(c.src, (e.srcs.get(c.src) || 0) + 1);
+    // Adopt lat/lon from the session with the highest (most stable) TTL → prevents flicker between polls
+    if ((c.ttl || 0) > e.maxTtl) {
+      e.maxTtl = c.ttl || 0;
+      e.lat = c.lat; e.lon = c.lon;
+      e.city = c.city || e.city;
+      e.country = c.country || e.country;
+    }
+  }
+  return [...orgMap.values()].map(e => ({
+    ...e,
+    totalSessions: [...e.srcs.values()].reduce((a, b) => a + b, 0),
+    // TTL ≥300s → fully active (1.0); below that, linear fade; floor at 0.15
+    freshness: Math.max(0.15, Math.min(1.0, (e.maxTtl || 0) / 300)),
+  }));
+}
+
+async function initWorldMap() {
+  if (worldGeo) { renderWorldMap(); return; }
+  const mc = document.getElementById('map-container');
+  const loadMsg = d3.select(mc).append('div')
+    .style('position','absolute').style('inset','0').style('display','flex')
+    .style('align-items','center').style('justify-content','center')
+    .style('color','#4b6a8a').style('font-size','13px').text('🌐 地図データを読み込み中…');
+  try {
+    const topo = await d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json');
+    worldGeo = topojson.feature(topo, topo.objects.countries);
+    loadMsg.remove();
+    renderWorldMap();
+  } catch(err) {
+    loadMsg.text('地図データの読み込みに失敗しました'); console.error('[map]', err);
+  }
+}
+
+function renderWorldMap() {
+  const mc = document.getElementById('map-container');
+  const w = mc.clientWidth, h = mc.clientHeight;
+  // If layout is not done and size is 0, retry on the next frame
+  if (w === 0 || h === 0) {
+    requestAnimationFrame(renderWorldMap);
+    return;
+  }
+  // Reset zoom factor (so we do not redraw at the previous zoom value)
+  currentMapK = 1;
+  mapProjection = d3.geoNaturalEarth1().rotate(getMapRotation()).fitSize([w, h], worldGeo);
+  mapPath = d3.geoPath(mapProjection);
+
+  mapSvg = d3.select('#world-map').attr('viewBox', `0 0 ${w} ${h}`);
+  mapSvg.selectAll('*').remove();
+  mapG = mapSvg.append('g');
+
+  // Ocean (sphere)
+  mapG.append('path').datum({type:'Sphere'}).attr('class','map-sphere').attr('d', mapPath);
+  // Graticule
+  mapG.append('path').datum(d3.geoGraticule()()).attr('class','map-graticule').attr('d', mapPath);
+  // Country borders
+  mapG.append('g').selectAll('path')
+    .data(worldGeo.features).join('path').attr('class','map-country').attr('d', mapPath);
+  // Ballistic-arc layer (bottom-most)
+  mapG.append('g').attr('class','map-arcs');
+  // Particle layer
+  mapG.append('g').attr('class','map-particles');
+  // Dot layer (above arcs and particles)
+  mapG.append('g').attr('class','map-dots');
+
+  // Home router marker (coordinates of the configured country)
+  const { lat: hLat, lon: hLon } = getHomeCoord();
+  const homeXY = mapProjection([hLon, hLat]);
+  const homeG = mapG.append('g').attr('class','map-home')
+    .attr('transform', `translate(${homeXY[0]},${homeXY[1]})`);
+  homeG.append('circle').attr('class','home-ring').attr('data-base-r', 10)
+    .attr('r', 10).attr('fill','#f59e0b').attr('fill-opacity',0.25)
+    .attr('stroke','#f59e0b').attr('stroke-width',1.5);
+  homeG.append('circle').attr('class','home-dot').attr('data-base-r', 5)
+    .attr('r', 5).attr('fill','#f59e0b');
+  homeG.append('text').attr('class','home-label').text('🏠')
+    .attr('text-anchor','middle').attr('dy','-12px').attr('font-size','11px');
+
+  // Zoom — dots/arcs/particles/markers are inverse-scaled so their on-screen size stays constant
+  mapSvg.call(
+    d3.zoom().scaleExtent([0.8, 20]).on('zoom', e => {
+      mapG.attr('transform', e.transform);
+      currentMapK = e.transform.k;
+      mapSvg.selectAll('circle.map-dot').attr('r', function() {
+        return parseFloat(this.getAttribute('data-base-r') || 5) / currentMapK;
+      });
+      mapSvg.selectAll('path.map-arc').attr('stroke-width', 0.5 / currentMapK);
+      mapSvg.selectAll('circle.map-particle').attr('r', 2.5 / currentMapK);
+      mapSvg.selectAll('.map-home circle').attr('r', function() {
+        return parseFloat(this.getAttribute('data-base-r')) / currentMapK;
+      });
+      mapSvg.select('.home-label').attr('dy', `${-12 / currentMapK}px`)
+        .attr('font-size', `${11 / currentMapK}px`);
+    })
+  );
+  updateMapDots();
+}
+
+// Build the d attribute for a ballistic Bezier curve (control point lifted upward)
+function ballisticD(x1, y1, x2, y2) {
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const dist = Math.hypot(x2 - x1, y2 - y1);
+  const lift = Math.min(dist * 0.38, 160); // arc height (proportional to distance, capped)
+  return `M${x1},${y1} Q${mx},${my - lift} ${x2},${y2}`;
+}
+
+// Start particle animation
+function startMapAnim() {
+  if (mapAnimId) return;
+  const tick = () => {
+    mapParticles.forEach(p => {
+      p.t = (p.t + p.speed) % 1.0;
+      try {
+        const len = p.t * p.totalLength;
+        const pt = p.pathEl.getPointAtLength(len);
+        // Bright yellow-white at start → fade toward org colour as it advances
+        const colorT = Math.min(p.t * 2.8, 1);
+        const col = d3.interpolate('#fffde7', p.orgColor)(colorT);
+        // Fade out over the final 15%
+        const opacity = p.t > 0.85 ? (1 - p.t) / 0.15 : 1;
+        d3.select(p.dotEl)
+          .attr('cx', pt.x).attr('cy', pt.y)
+          .attr('fill', col)
+          .attr('opacity', p.visible ? opacity * p.freshness : 0)
+          .attr('r', 2.5 / currentMapK);
+      } catch(_) {}
+    });
+    mapAnimId = requestAnimationFrame(tick);
+  };
+  mapAnimId = requestAnimationFrame(tick);
+}
+
+function stopMapAnim() {
+  if (mapAnimId) { cancelAnimationFrame(mapAnimId); mapAnimId = null; }
+  mapParticles = [];
+}
+
+function updateMapDots() {
+  if (!mapSvg || !mapProjection) return;
+  const points = buildMapPoints();
+
+  const maxS = Math.max(1, ...points.map(p => p.totalSessions), 1);
+  const rScale = d => 5 + Math.sqrt(d.totalSessions / maxS) * 12;
+  const colorScale = d3.scaleSequentialLog()
+    .domain([1, Math.max(2, maxS)])
+    .interpolator(d3.interpolate('#6d28d9', '#f97316'));
+
+  const selNode = selectedMac ? nodes.find(n => n.id === selectedMac) : null;
+  const selIp = selNode?.client?.ip || null;
+
+  const { lat: _hLat, lon: _hLon } = getHomeCoord();
+  const homeXY = mapProjection([_hLon, _hLat]);
+  const [hx, hy] = homeXY;
+
+  // ── Ballistic arcs (faint background arcs) ────────────────────────
+  const arcsG = mapSvg.select('.map-arcs');
+  arcsG.selectAll('path.map-arc')
+    .data(points, d => d.key)
+    .join('path')
+    .attr('class', 'map-arc')
+    .attr('d', d => {
+      const xy = mapProjection([d.lon, d.lat]) || [-200, -200];
+      return ballisticD(hx, hy, xy[0], xy[1]);
+    })
+    .attr('fill', 'none')
+    .attr('stroke', d => colorScale(d.totalSessions))
+    .attr('stroke-width', 0.5 / currentMapK)
+    .attr('stroke-opacity', d => (!selIp || d.srcs.has(selIp) ? 0.18 : 0.03) * d.freshness);
+
+  // ── Rebuild particles ─────────────────────────────────────────────
+  stopMapAnim();
+  const particlesG = mapSvg.select('.map-particles');
+  particlesG.selectAll('*').remove();
+
+  arcsG.selectAll('path.map-arc').each(function(d) {
+    const pathEl = this;
+    const totalLength = pathEl.getTotalLength();
+    if (totalLength < 5) return;
+    const pct      = d.totalSessions / maxS;
+    const fresh    = d.freshness;
+    // Lower freshness → slower and fewer particles
+    const speed    = (0.0025 + pct * 0.0095) * (0.3 + 0.7 * fresh);
+    const nParts   = fresh < 0.3 ? 1 : pct > 0.5 ? 4 : pct > 0.2 ? 3 : pct > 0.05 ? 2 : 1;
+    const visible  = !selIp || d.srcs.has(selIp);
+    const orgColor = colorScale(d.totalSessions);
+
+    for (let i = 0; i < nParts; i++) {
+      const t0 = i / nParts; // stagger start positions evenly
+      const dotEl = particlesG.append('circle')
+        .attr('class', 'map-particle')
+        .attr('r', 2.5 / currentMapK)
+        .attr('fill', '#fffde7')
+        .attr('opacity', 0)
+        .node();
+      mapParticles.push({ pathEl, totalLength, t: t0, speed, orgColor, dotEl, visible, freshness: fresh });
+    }
+  });
+  startMapAnim();
+
+  // ── Dots (destination markers) ───────────────────────────────────
+  const dotsG = mapSvg.select('.map-dots');
+  dotsG.selectAll('circle.map-dot')
+    .data(points, d => d.key)
+    .join(
+      enter => enter.append('circle').attr('class','map-dot')
+        .attr('cx', d => (mapProjection([d.lon, d.lat]) || [-100,-100])[0])
+        .attr('cy', d => (mapProjection([d.lon, d.lat]) || [-100,-100])[1])
+        .attr('data-base-r', d => rScale(d))
+        // Draw at full size immediately (avoided the 0→full transition that caused invisible periods on instant switch)
+        .attr('r', d => rScale(d) / currentMapK)
+        .attr('fill', d => colorScale(d.totalSessions))
+        .attr('fill-opacity', 0.8)
+        .attr('stroke', d => colorScale(d.totalSessions))
+        .attr('stroke-width', 1).attr('stroke-opacity', 0.9)
+        .on('mouseenter', showMapTooltip).on('mousemove', moveMapTooltip).on('mouseleave', hideMapTooltip),
+      update => update
+        .attr('cx', d => (mapProjection([d.lon, d.lat]) || [-100,-100])[0])
+        .attr('cy', d => (mapProjection([d.lon, d.lat]) || [-100,-100])[1])
+        .attr('data-base-r', d => rScale(d))
+        .attr('fill', d => colorScale(d.totalSessions))
+        .attr('stroke', d => colorScale(d.totalSessions))
+        .attr('r', d => rScale(d) / currentMapK), // immediate update, no transition
+      exit => exit.transition().duration(300).attr('r', 0).remove()
+    )
+    .attr('opacity', d => (!selIp || d.srcs.has(selIp) ? d.freshness : 0.08));
+}
+
+// ─── Time filter ──────────────────────────────────────────────────────────────
+function applyTimeFilter() {
+  if (asusActive) updateOrgGraph();
+  else            buildGraphFromConnections();
+  if (mapMode)    updateMapDots();
+  if (statsMode)  updateStats();
+  const selNode = nodes.find(n => n.id === selectedMac);
+  updateConnPanel(selNode?.client?.ip || null);
+}
+
+// ─── Statistics view ─────────────────────────────────────────────────────────
+const STATS_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#a78bfa'];
+let chartMode = 'stack'; // 'stack' | 'line'
+document.querySelectorAll('.chart-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    chartMode = btn.dataset.mode;
+    document.querySelectorAll('.chart-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+    if (statsMode) updateStats();
+  });
+});
+
+function updateStats() {
+  if (!statsMode) return;
+  const tlSvg  = document.getElementById('chart-timeline');
+  const barSvg = document.getElementById('chart-bar');
+  const subtitle = document.getElementById('stats-subtitle');
+  const empty  = document.getElementById('stats-empty');
+
+  // Selected node and period
+  const sel = selectedMac;
+  const selNode = sel ? nodes.find(n => n.id === sel) : null;
+  const selIp   = selNode?.client?.ip || null;
+
+  // Period label
+  const filterLabel = document.querySelector('#time-filter-select option:checked')?.textContent || '';
+  subtitle.textContent = selIp
+    ? `${t('stats.subtitle.device')}: ${selIp} / ${t('stats.subtitle.period')}: ${filterLabel}`
+    : `${t('stats.subtitle.all')} / ${t('stats.subtitle.period')}: ${filterLabel}`;
+
+  // Period-filtered connection data
+  let conns = getFilteredConnections();
+  if (selIp) conns = conns.filter(c => c.src === selIp);
+
+  if (!conns.length) {
+    empty.style.display = 'block';
+    document.getElementById('stats-timeline').style.display = 'none';
+    document.getElementById('stats-bar').style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  document.getElementById('stats-timeline').style.display = 'flex';
+  document.getElementById('stats-bar').style.display = 'flex';
+
+  // ── Total sessions per destination ──────────────────────
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const orgCounts = new Map();
+  for (const c of conns) {
+    const key = c.org || c.dstHost || c.dst;
+    orgCounts.set(key, (orgCounts.get(key) || 0) + 1);
+  }
+  const sortedOrgs = [...orgCounts.entries()].sort((a,b) => b[1] - a[1]);
+  // On mobile the screen is narrow, so split only the top 5 series; others go into "Other"
+  const topN = isMobile ? 5 : 10;
+  const topOrgs = sortedOrgs.slice(0, topN).map(e => e[0]);
+
+  // Bar chart: top 15 on mobile, all on desktop (container scrolls)
+  drawBarChart(isMobile ? sortedOrgs.slice(0, 15) : sortedOrgs);
+
+  // ── Time-series buckets ──────────────────────────────
+  // Decide bucket width from the period
+  const tr = getTimeRange();
+  const now = Date.now() + serverTimeOffset;
+  const fromT = tr.from ?? Math.min(...conns.map(c => c.firstSeen || c.lastSeen || now));
+  const toT   = tr.to   ?? now;
+  const range = Math.max(toT - fromT, 60_000);
+  const buckets = 60; // number of buckets
+  const bw = range / buckets;
+
+  // Aggregate per org × bucket
+  const series = new Map(); // org -> Array<number>
+  for (const o of topOrgs) series.set(o, new Array(buckets).fill(0));
+  series.set('__other__', new Array(buckets).fill(0));
+  for (const c of conns) {
+    const t = c.firstSeen || c.lastSeen || 0;
+    const bi = Math.min(buckets - 1, Math.max(0, Math.floor((t - fromT) / bw)));
+    const key = c.org || c.dstHost || c.dst;
+    const arr = topOrgs.includes(key) ? series.get(key) : series.get('__other__');
+    arr[bi]++;
+  }
+
+  drawTimeline(series, fromT, toT, buckets, bw, topOrgs);
+}
+
+function drawTimeline(series, fromT, toT, buckets, bw, topOrgs) {
+  const svg = d3.select('#chart-timeline');
+  const node = svg.node();
+  const w = node.clientWidth || 600;
+  const h = node.clientHeight || 200;
+  svg.attr('viewBox', `0 0 ${w} ${h}`);
+  svg.selectAll('*').remove();
+  const margin = { top: 8, right: 8, bottom: 22, left: 36 };
+  const iw = w - margin.left - margin.right;
+  const ih = h - margin.top - margin.bottom;
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Centre time of each bucket
+  const times = d3.range(buckets).map(i => fromT + bw * (i + 0.5));
+  const xScale = d3.scaleTime().domain([fromT, toT]).range([0, iw]);
+
+  const labels = [...topOrgs, '__other__'];
+  // Visible targets (drop all-zero series)
+  const visibleLabels = labels.filter(l => {
+    const arr = series.get(l);
+    return arr && arr.some(v => v > 0);
+  });
+  const colorFor = (label) => label === '__other__'
+    ? '#6b7280'
+    : STATS_COLORS[labels.indexOf(label) % STATS_COLORS.length];
+
+  if (chartMode === 'stack') {
+    // ─── Stacked area chart ──────────────────────────
+    // Reshape data into [{time, label1: v, label2: v, ...}] for d3.stack
+    const stackData = times.map((t, i) => {
+      const row = { time: t };
+      for (const l of visibleLabels) row[l] = series.get(l)[i];
+      return row;
+    });
+    const stack = d3.stack().keys(visibleLabels);
+    const layers = stack(stackData);
+    const maxY = d3.max(layers, layer => d3.max(layer, d => d[1])) || 1;
+    const yScale = d3.scaleLinear().domain([0, maxY]).nice().range([ih, 0]);
+
+    g.append('g').attr('class', 'stats-axis')
+      .attr('transform', `translate(0,${ih})`)
+      .call(d3.axisBottom(xScale).ticks(Math.min(8, Math.floor(iw / 80))).tickSizeOuter(0));
+    g.append('g').attr('class', 'stats-axis')
+      .call(d3.axisLeft(yScale).ticks(5).tickSizeOuter(0));
+
+    const area = d3.area()
+      .x((_, i) => xScale(times[i]))
+      .y0(d => yScale(d[0]))
+      .y1(d => yScale(d[1]))
+      .curve(d3.curveMonotoneX);
+    g.selectAll('path.stack-area').data(layers).join('path')
+      .attr('class', 'stack-area')
+      .attr('d', area)
+      .attr('fill', d => colorFor(d.key))
+      .attr('fill-opacity', 0.85)
+      .attr('stroke', d => colorFor(d.key))
+      .attr('stroke-width', 0.5);
+  } else {
+    // ─── Line chart ──────────────────────────────────
+    const maxY = Math.max(1, ...visibleLabels.map(l => Math.max(...series.get(l))));
+    const yScale = d3.scaleLinear().domain([0, maxY]).nice().range([ih, 0]);
+
+    g.append('g').attr('class', 'stats-axis')
+      .attr('transform', `translate(0,${ih})`)
+      .call(d3.axisBottom(xScale).ticks(Math.min(8, Math.floor(iw / 80))).tickSizeOuter(0));
+    g.append('g').attr('class', 'stats-axis')
+      .call(d3.axisLeft(yScale).ticks(5).tickSizeOuter(0));
+
+    const line = d3.line()
+      .x((_, i) => xScale(times[i]))
+      .y(d => yScale(d))
+      .curve(d3.curveMonotoneX);
+    for (const label of visibleLabels) {
+      g.append('path').datum(series.get(label))
+        .attr('class', 'stats-line')
+        .attr('stroke', colorFor(label))
+        .attr('d', line);
+    }
+  }
+
+  // Legend
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const oldLegend = document.querySelector('#stats-timeline .stats-legend');
+  if (oldLegend) oldLegend.remove();
+  const legend = document.createElement('div');
+  legend.className = 'stats-legend';
+  for (const label of visibleLabels) {
+    const item = document.createElement('div');
+    item.className = 'stats-legend-item';
+    const dot = document.createElement('div');
+    dot.className = 'stats-legend-dot';
+    dot.style.background = colorFor(label);
+    item.appendChild(dot);
+    const labelText = label === '__other__' ? t('stats.legend.other') : truncateLabel(label, isMobile ? 18 : 40);
+    item.appendChild(document.createTextNode(labelText));
+    item.title = label === '__other__' ? t('stats.legend.other') : label;
+    legend.appendChild(item);
+  }
+  document.getElementById('stats-timeline').appendChild(legend);
+}
+
+function truncateLabel(s, maxLen) {
+  s = String(s);
+  return s.length > maxLen ? s.substring(0, maxLen - 1) + '…' : s;
+}
+
+function drawBarChart(orgs /* [[name, count], ...] */) {
+  const svg = d3.select('#chart-bar');
+  const node = svg.node();
+  const w = node.clientWidth || 600;
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const rowHeight = isMobile ? 18 : 22;
+  const h = Math.max(60, orgs.length * rowHeight + 10);
+  svg.attr('viewBox', `0 0 ${w} ${h}`)
+     .attr('width', w).attr('height', h);
+  svg.selectAll('*').remove();
+  // Make the label area narrower on mobile
+  const leftMargin = isMobile ? 110 : 180;
+  const labelMax   = isMobile ? 14  : 32;
+  const margin = { top: 4, right: 40, bottom: 6, left: leftMargin };
+  const iw = w - margin.left - margin.right;
+  const ih = h - margin.top - margin.bottom;
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const maxX = Math.max(1, ...orgs.map(d => d[1]));
+  const xScale = d3.scaleLinear().domain([0, maxX]).range([0, iw]);
+  const yScale = d3.scaleBand().domain(orgs.map(d => d[0])).range([0, ih]).padding(0.2);
+
+  // Labels (truncate long names; show full name via title)
+  g.append('g').attr('class', 'stats-axis').call(
+    d3.axisLeft(yScale).tickSize(0).tickFormat(d => truncateLabel(d, labelMax))
+  ).selectAll('text')
+    .style('font-size', isMobile ? '9px' : '10px')
+    .append('title').text(d => d);
+
+  // Bars
+  g.selectAll('rect').data(orgs).join('rect')
+    .attr('class', 'stats-bar')
+    .attr('x', 0)
+    .attr('y', d => yScale(d[0]))
+    .attr('height', yScale.bandwidth())
+    .attr('width', d => xScale(d[1]))
+    .attr('fill', (_, i) => STATS_COLORS[i % STATS_COLORS.length])
+    .attr('rx', 2);
+
+  // Value labels
+  g.selectAll('text.bar-value').data(orgs).join('text')
+    .attr('class', 'bar-value')
+    .attr('x', d => xScale(d[1]) + 4)
+    .attr('y', d => yScale(d[0]) + yScale.bandwidth() / 2 + 4)
+    .attr('font-size', '10px')
+    .attr('fill', '#e2e8f0')
+    .text(d => d[1]);
+}
+
+document.getElementById('time-filter-select').addEventListener('change', e => {
+  currentTimeFilter = e.target.value;
+  const customWrap = document.getElementById('custom-range');
+  if (currentTimeFilter === 'custom') {
+    customWrap.style.display = 'inline-flex';
+    // Initial values: past 1 hour
+    const now = new Date(Date.now() + serverTimeOffset);
+    const past = new Date(now.getTime() - 3600_000);
+    const fromEl = document.getElementById('custom-from');
+    const toEl   = document.getElementById('custom-to');
+    if (!fromEl.value) fromEl.value = toLocalDatetimeStr(past);
+    if (!toEl.value)   toEl.value   = toLocalDatetimeStr(now);
+    customRangeFrom = new Date(fromEl.value).getTime();
+    customRangeTo   = new Date(toEl.value).getTime();
+  } else {
+    customWrap.style.display = 'none';
+  }
+  applyTimeFilter();
+});
+
+// Changes to the custom-period datetime-local inputs
+function toLocalDatetimeStr(d) {
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+['custom-from', 'custom-to'].forEach(id => {
+  document.getElementById(id).addEventListener('change', () => {
+    customRangeFrom = new Date(document.getElementById('custom-from').value).getTime() || null;
+    customRangeTo   = new Date(document.getElementById('custom-to').value).getTime()   || null;
+    if (currentTimeFilter === 'custom') applyTimeFilter();
+  });
+});
+
+// ─── View tabs ────────────────────────────────────────────────────────────────
+let currentView = 'graph';
+let statsMode = false;
+function switchView(view) {
+  currentView = view;
+  mapMode   = (view === 'map');
+  statsMode = (view === 'stats');
+  document.getElementById('graph-container').style.display = view === 'graph' ? 'flex' : 'none';
+  document.getElementById('map-container').style.display   = view === 'map'   ? 'flex' : 'none';
+  document.getElementById('stats-container').style.display = view === 'stats' ? 'flex' : 'none';
+  document.getElementById('btn-graph').classList.toggle('active', view === 'graph');
+  document.getElementById('btn-map').classList.toggle('active',   view === 'map');
+  document.getElementById('btn-stats').classList.toggle('active', view === 'stats');
+  document.body.classList.toggle('is-stats-mode', view === 'stats');
+  if (view === 'map') requestAnimationFrame(() => initWorldMap());
+  else                stopMapAnim();
+  if (view === 'stats') requestAnimationFrame(updateStats);
+}
+document.getElementById('btn-graph').addEventListener('click', () => switchView('graph'));
+document.getElementById('btn-map').addEventListener('click',   () => switchView('map'));
+document.getElementById('btn-stats').addEventListener('click', () => switchView('stats'));
+
+// ─── Device search ────────────────────────────────────────────────────────────
+document.getElementById('device-search-input').addEventListener('input', () => {
+  applyFilter(lastClients);
+  applyGraphFilter();
+});
+
+// Init
+resize();
+</script>
+</body>
+</html>
