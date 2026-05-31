@@ -1,0 +1,27 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+# 設定・履歴ファイル（秘密情報含む）
+.widemap.json
+.widemap.connections.jsonl
+.widemap.notes.json
+.oui_cache.txt
+server.log
+*.log
+# 個人的なバックログ
+backlog.md
+# 開発ツールのローカル設定（家庭内IP等を含む可能性）
+.claude/settings.local.json
+.claude/
+# OS / エディタ
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+# 鍵関連（誤って置かれた場合の保険）
+*.pem
+*.key
+id_rsa*
+id_ed25519*
