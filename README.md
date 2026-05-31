@@ -21,6 +21,10 @@ Widemap shows you *where* every device on your home or office network is connect
 - Keeps a **7-day connection history** with persistent storage
 - Single-page dark-themed UI with graph view, map view, and statistics
 
+## Demo
+
+<video src="docs/widemap-redacted.mp4" controls width="800"></video>
+
 ## Screenshots
 
 ![widemap1](docs/widemap1.png)
@@ -187,6 +191,13 @@ Any model with the standard web admin interface, used in AP mode or AiMesh:
 ## License
 
 [AGPL-3.0](LICENSE) — If you modify and deploy this as a network service, you must share your changes.
+
+```
+Widemap — Real-time network connection visualizer
+Copyright (C) 2025 Yoichi Takizawa
+
+Source code: https://github.com/yo1t/widemap
+```
 
 ## Contributing
 
