@@ -1,0 +1,146 @@
+// DNS reverse lookup, RDAP, GeoIP batch enrichment
+'use strict';
+
+const http = require('http');
+const https = require('https');
+const dns = require('dns').promises;
+
+const dnsCache    = new Map(); // ip → {host, expires}
+const DNS_TTL_MS  = 5 * 60 * 1000;
+
+const rdapCache   = new Map(); // ip → {country, org, expires}
+const RDAP_TTL_MS   = 24 * 60 * 60 * 1000; // 24h
+const RDAP_FAIL_TTL =  5 * 60 * 1000;       // 5min retry on failure
+
+const geoCache    = new Map(); // ip → {lat, lon, city, countryCode, expires}
+const GEO_TTL_MS  = 24 * 60 * 60 * 1000;
+const GEO_FAIL_TTL =  5 * 60 * 1000;
+
+function httpsGetJson(url, redirects = 0) {
+  return new Promise((resolve, reject) => {
+    if (redirects > 5) return reject(new Error('too many redirects'));
+    const req = https.get(url, { headers: { Accept: 'application/rdap+json' } }, res => {
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+        res.resume();
+        return resolve(httpsGetJson(res.headers.location, redirects + 1));
+      }
+      let body = '';
+      res.on('data', d => { body += d; });
+      res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { reject(e); } });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('timeout')); });
+  });
+}
+
+// ip-api.com batch API (HTTP) — server-side only
+function httpPostJson(url, body) {
+  return new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(body));
+    const u = new URL(url);
+    const opts = {
+      hostname: u.hostname, port: Number(u.port) || 80,
+      path: u.pathname + u.search, method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': data.length },
+    };
+    const req = http.request(opts, res => {
+      let buf = '';
+      res.on('data', d => { buf += d; });
+      res.on('end', () => { try { resolve(JSON.parse(buf)); } catch(e) { reject(e); } });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => { req.destroy(); reject(new Error('geo timeout')); });
+    req.write(data); req.end();
+  });
+}
+
+async function lookupGeoBatch(ips) {
+  const now = Date.now();
+  const toFetch = ips.filter(ip => { const c = geoCache.get(ip); return !c || now >= c.expires; });
+  if (!toFetch.length) return;
+  for (let i = 0; i < toFetch.length; i += 100) {
+    const chunk = toFetch.slice(i, i + 100);
+    try {
+      const results = await httpPostJson(
+        'http://ip-api.com/batch?fields=status,lat,lon,country,city,countryCode,query',
+        chunk.map(ip => ({ query: ip }))
+      );
+      let ok = 0;
+      results.forEach(r => {
+        if (r.status === 'success') {
+          geoCache.set(r.query, { lat: r.lat, lon: r.lon, city: r.city, countryCode: r.countryCode, expires: now + GEO_TTL_MS });
+          ok++;
+        } else {
+          geoCache.set(r.query, { lat: null, lon: null, expires: now + GEO_FAIL_TTL });
+        }
+      });
+      console.log(`[geo] ${ok}/${chunk.length} IPs geo-resolved`);
+    } catch (err) {
+      console.error('[geo] batch error:', err.message);
+    }
+  }
+}
+
+// NIC handle check: no spaces + only alphanumeric/hyphen/underscore → treat as identifier
+function isNicHandle(s) {
+  if (!s) return true;
+  if (/\s/.test(s)) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(s);
+}
+
+async function lookupRdap(ip) {
+  const now = Date.now();
+  const cached = rdapCache.get(ip);
+  if (cached && now < cached.expires) return cached;
+  try {
+    const data = await httpsGetJson(`https://rdap.arin.net/registry/ip/${ip}`);
+    const country = data.country || null;
+
+    let org = null;
+    if (data.entities) {
+      const fns = data.entities
+        .filter(e => e.roles?.includes('registrant') && e.vcardArray?.[1])
+        .map(e => e.vcardArray[1].find(v => v[0] === 'fn')?.[3])
+        .filter(Boolean);
+      org = fns.find(s => !isNicHandle(s)) || fns[0] || null;
+    }
+    if (!org) org = isNicHandle(data.name) ? null : data.name;
+    if (!org && data.name) org = data.name;
+
+    const result = { country, org, expires: now + RDAP_TTL_MS };
+    rdapCache.set(ip, result);
+    console.log(`[rdap] ${ip} → ${country} / ${org}`);
+    return result;
+  } catch (err) {
+    const result = { country: null, org: null, expires: now + RDAP_FAIL_TTL };
+    rdapCache.set(ip, result);
+    return result;
+  }
+}
+
+async function reverseDns(ip) {
+  const now = Date.now();
+  const cached = dnsCache.get(ip);
+  if (cached && now < cached.expires) return cached.host;
+  try {
+    const [host] = await dns.reverse(ip);
+    dnsCache.set(ip, { host, expires: now + DNS_TTL_MS });
+    return host;
+  } catch {
+    dnsCache.set(ip, { host: ip, expires: now + 60_000 });
+    return ip;
+  }
+}
+
+function getDnsCache() { return dnsCache; }
+function getRdapCache() { return rdapCache; }
+function getGeoCache() { return geoCache; }
+
+module.exports = {
+  reverseDns,
+  lookupRdap,
+  lookupGeoBatch,
+  getDnsCache,
+  getRdapCache,
+  getGeoCache,
+};
