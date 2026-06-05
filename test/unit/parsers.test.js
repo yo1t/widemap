@@ -6,105 +6,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-// ─── Extract functions from server.js (no side-effects) ─────────────────────
-// Since server.js doesn't export yet, we re-implement the pure functions here.
-// After module split, these will import directly from src/ modules.
-
-function parseNatDetail(text) {
-  const sessions = [];
-  for (const line of text.split('\n')) {
-    const m = line.match(/^\s*(TCP|UDP|ICMP|GRE)\s+(\S+)\s+(\S+)\s+\S+\s+(\d+)/);
-    if (!m) continue;
-    const [, proto, srcRaw, dstRaw, ttl] = m;
-    if (dstRaw.includes('*')) continue;
-    const splitAddr = s => { const p = s.lastIndexOf('.'); return [s.slice(0, p), parseInt(s.slice(p + 1))]; };
-    const [src, sport] = splitAddr(srcRaw);
-    const [dst, dport] = splitAddr(dstRaw);
-    if (!src.startsWith('192.168.') && !src.startsWith('10.')) continue;
-    sessions.push({ proto, src, sport, dst, dport, ttl: parseInt(ttl) });
-  }
-  return sessions;
-}
-
-function parseOuiManuf(text) {
-  const db = new Map();
-  for (const line of text.split('\n')) {
-    if (!line || line.startsWith('#')) continue;
-    const parts = line.split('\t');
-    if (parts.length < 2) continue;
-    const prefix = parts[0].trim();
-    const fullName = (parts[2] || parts[1]).trim();
-    if (!prefix || !fullName) continue;
-    const hex = prefix.replace(/[:\-\.]/g, '');
-    if (hex.length !== 6) continue;
-    db.set(hex.toUpperCase(), fullName);
-  }
-  return db;
-}
-
-function isAllowedRouterIp(ip) {
-  if (typeof ip !== 'string') return false;
-  const m = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (!m) return false;
-  const [a, b] = [parseInt(m[1]), parseInt(m[2])];
-  if (a > 255 || b > 255 || parseInt(m[3]) > 255 || parseInt(m[4]) > 255) return false;
-  if (a === 169 && b === 254) return false;
-  if (a === 127) return false;
-  if (a === 10) return true;
-  if (a === 172 && b >= 16 && b <= 31) return true;
-  if (a === 192 && b === 168) return true;
-  return false;
-}
-
-function htmlEscape(s) {
-  return String(s).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
-
-function parseClientList(raw) {
-  const src = raw?.get_clientlist || raw;
-  if (!src || typeof src !== 'object') return [];
-  return Object.entries(src)
-    .filter(([mac, info]) => mac !== 'maclist' && mac !== 'ClientAPILevel' && typeof info === 'object')
-    .map(([mac, info]) => {
-      const isWL = info.isWL;
-      const connType = (isWL !== undefined && isWL !== null && isWL !== '')
-        ? String(isWL) : String(info.type || '0');
-      return {
-        mac, ip: info.ip || '', name: info.nickName || info.name || mac,
-        type: connType, isOnline: info.isOnline === '1' || info.isOnline === 1,
-        rssi: parseInt(info.rssi || '0'),
-        curRx: parseFloat(info.curRx || '0'), curTx: parseFloat(info.curTx || '0'),
-        totalRx: parseInt(info.totalRx || '0'), totalTx: parseInt(info.totalTx || '0'),
-        ipMethod: info.ipMethod || 'dhcp', internetMode: info.internetMode || 'allow',
-        amesh_papMac: info.amesh_papMac || '', vendor: info.vendor || '',
-      };
-    })
-    .filter(c => c.isOnline);
-}
-
-function computeRates(clients) {
-  return clients.map(c => ({
-    ...c,
-    rxRate: (parseFloat(c.curRx) || 0) * 1024,
-    txRate: (parseFloat(c.curTx) || 0) * 1024,
-  }));
-}
-
-function inferVendorCategory(vendor) {
-  if (!vendor) return null;
-  const v = vendor.toLowerCase();
-  if (v.includes('apple')) return { brand: 'Apple', category: 'Apple機器' };
-  if (v.includes('amazon')) return { brand: 'Amazon', category: 'Amazon機器 (Echo/Fire TV/Kindle等)' };
-  if (v.includes('google')) return { brand: 'Google', category: 'Google機器 (Nest/Chromecast/Pixel等)' };
-  if (v.includes('sonos')) return { brand: 'Sonos', category: 'Sonos スピーカー' };
-  if (v.includes('nintendo')) return { brand: 'Nintendo', category: 'Nintendo ゲーム機' };
-  if (v.includes('sony')) return { brand: 'Sony', category: 'Sony 機器 (PlayStation/TV等)' };
-  if (v.includes('raspberry pi')) return { brand: 'RasPi', category: 'Raspberry Pi' };
-  if (v.includes('espressif')) return { brand: 'Espressif', category: 'ESP32/ESP8266 IoT機器' };
-  return null;
-}
+// Import from modules
+const { isAllowedRouterIp, htmlEscape } = require('../../src/utils');
+const { parseNatDetail } = require('../../src/pollers/yamaha');
+const { parseClientList, computeRates, parseMeshNodes } = require('../../src/pollers/asus');
+const { parseOuiManuf, lookupAppleModel, inferVendorCategory } = require('../../src/device-identify');
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
@@ -191,7 +97,6 @@ describe('parseOuiManuf', () => {
 
   it('skips comment lines', () => {
     const db = parseOuiManuf(fixture);
-    // Should not have an entry starting with '#'
     for (const key of db.keys()) {
       assert(!key.startsWith('#'));
     }
@@ -335,6 +240,22 @@ describe('computeRates', () => {
   });
 });
 
+describe('lookupAppleModel', () => {
+  it('returns product name for known model', () => {
+    assert.equal(lookupAppleModel('Mac14,2'), 'MacBook Air (M2, 2022)');
+    assert.equal(lookupAppleModel('iPhone17,1'), 'iPhone 16 Pro');
+  });
+
+  it('returns null for unknown model', () => {
+    assert.equal(lookupAppleModel('UnknownModel99,9'), null);
+  });
+
+  it('returns null for null/undefined', () => {
+    assert.equal(lookupAppleModel(null), null);
+    assert.equal(lookupAppleModel(undefined), null);
+  });
+});
+
 describe('inferVendorCategory', () => {
   it('identifies Apple devices', () => {
     const result = inferVendorCategory('Apple, Inc.');
@@ -351,6 +272,16 @@ describe('inferVendorCategory', () => {
     assert.equal(result.brand, 'RasPi');
   });
 
+  it('identifies Nintendo', () => {
+    const result = inferVendorCategory('Nintendo Co., Ltd.');
+    assert.equal(result.brand, 'Nintendo');
+  });
+
+  it('identifies Samsung', () => {
+    const result = inferVendorCategory('Samsung Electronics Co.,Ltd');
+    assert.equal(result.brand, 'Samsung');
+  });
+
   it('returns null for unknown vendor', () => {
     assert.equal(inferVendorCategory('Unknown Vendor Corp'), null);
   });
@@ -358,5 +289,28 @@ describe('inferVendorCategory', () => {
   it('returns null for empty/null input', () => {
     assert.equal(inferVendorCategory(null), null);
     assert.equal(inferVendorCategory(''), null);
+  });
+});
+
+describe('parseMeshNodes', () => {
+  it('parses mesh node list', () => {
+    const raw = {
+      get_cfg_clientlist: [
+        { mac: 'AA:BB:CC:DD:EE:FF', ip: '192.168.1.2', ui_model_name: 'RT-AX88U', alias: 'Living Room', online: '1' },
+        { mac: '11:22:33:44:55:66', ip: '192.168.1.3', model_name: 'RT-AX58U', alias: '', online: '0' },
+      ]
+    };
+    const nodes = parseMeshNodes(raw);
+    assert.equal(nodes.length, 2);
+    assert.equal(nodes[0].model, 'RT-AX88U');
+    assert.equal(nodes[0].online, true);
+    assert.equal(nodes[1].model, 'RT-AX58U');
+    assert.equal(nodes[1].online, false);
+    assert.equal(nodes[1].alias, '11:22:33:44:55:66');
+  });
+
+  it('returns empty array for missing data', () => {
+    assert.deepEqual(parseMeshNodes({}), []);
+    assert.deepEqual(parseMeshNodes({ get_cfg_clientlist: [] }), []);
   });
 });
