@@ -579,12 +579,12 @@ asus.configure({
 });
 
 // ─── Startup ──────────────────────────────────────────────────────────────────
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Widemap: http://localhost:${PORT}`);
   loadConfig();
   ensureAdminToken();
   loadNotes();
-  history.loadConnectionHistory();
+  await history.loadConnectionHistory();
   console.log(`Router IP: ${asus.getRouterIp()}`);
   deviceId.loadOuiDb();
   yamaha.connectYamaha(() => {
@@ -599,7 +599,8 @@ server.listen(PORT, () => {
 // Graceful shutdown
 function shutdown() {
   console.log('[shutdown] Saving history...');
-  try { history.compactHistoryLog(); } catch {}
+  try { history.snapshotHistory(); } catch {}
+  try { history.closeDb(); } catch {}
   process.exit(0);
 }
 process.on('SIGINT',  shutdown);
