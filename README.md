@@ -18,8 +18,10 @@ Widemap shows you *where* every device on your home or office network is connect
 - Plots all connections on an interactive **world map** with animated arcs
 - Identifies local devices using **OUI vendor lookup**, **mDNS/Bonjour**, **SSDP**, **NetBIOS**, and an **Apple model dictionary** (resolves down to "iPhone 15 Pro")
 - Optionally connects to an **ASUS WiFi access point** (used as AP/mesh, not as a router) to get WiFi client details (band, signal strength, traffic rates, AiMesh topology)
-- Keeps a **7-day connection history** with persistent storage
-- Single-page dark-themed UI with graph view, map view, and statistics
+- Keeps a **7-day connection history** in **SQLite** (WAL mode, crash-safe)
+- **Threat intelligence**: matches all connections against Feodo Tracker, ThreatFox, URLhaus, and Spamhaus DROP feeds (auto-refreshed hourly)
+- **Connection log**: sortable/searchable table of all sessions with threat status badges
+- Single-page dark-themed UI with graph view, map view, statistics, and connection log
 
 ## Demo
 
@@ -46,16 +48,18 @@ The sidebar lists every device on your LAN, enriched with hostnames, vendor name
 └─────────────────┘          │   Server     │◄──────────► Browser
 ┌─────────────────┐  HTTP    │  (Node.js)   │
 │  ASUS WiFi AP   │◄────────►│              │
-│  (Client list)  │          └──────────────┘
-└─────────────────┘               │
-                          ┌───────┴───────┐
-                          │ Enrichment    │
-                          │ • Reverse DNS │
-                          │ • RDAP (org)  │
-                          │ • GeoIP       │
-                          │ • OUI vendor  │
-                          │ • mDNS/SSDP   │
-                          └───────────────┘
+│  (Client list)  │          └──────┬───────┘
+└─────────────────┘                 │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+              ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
+              │ Enrichment│  │  Threat   │  │  SQLite   │
+              │ • Rev DNS │  │  Intel    │  │  History  │
+              │ • RDAP    │  │ • Feodo   │  │  (WAL)    │
+              │ • GeoIP   │  │ • TFox    │  └───────────┘
+              │ • OUI     │  │ • URLhaus │
+              │ • mDNS    │  │ • DROP    │
+              └───────────┘  └───────────┘
 ```
 
 ## Requirements
@@ -161,7 +165,19 @@ The ASUS device is used as a **WiFi access point (AP mode or AiMesh)**, not as a
 - **Graph view**: Force-directed network topology
 - **World map**: Destination IPs plotted with animated arcs from your location
 - **Statistics**: Time-series charts and bar charts of session counts per destination
+- **Connection log**: Full session table with threat indicators, sortable columns, and per-column search filters (text match, regex, date range)
 - **Connection panel**: Per-device list of active internet connections with org/country info
+- **IPv4/IPv6 badges**: Protocol detection per device via NDP cache polling
+
+### Threat Intelligence (C2/Botnet Detection)
+
+- **Feodo Tracker**: Emotet/Dridex/TrickBot C2 server IPs
+- **ThreatFox**: Malware IOC (IP:port)
+- **URLhaus**: Malware distribution URLs (with low-confidence handling for CDN domains like GitHub)
+- **Spamhaus DROP**: Hijacked IP ranges (CIDR)
+- Three confidence levels: 🚨 Detected (high) / ⚠️ Review (low — legitimate service) / ✅ Clear
+- Detailed threat popup with actionable guidance per confidence level
+- Auto-refresh feeds every hour (configurable)
 
 ### Security
 
@@ -188,10 +204,17 @@ Any model with the standard web admin interface, used in AP mode or AiMesh:
 
 ## Roadmap
 
-- [ ] Threat intelligence integration (C2/botnet detection)
-- [ ] SQLite-based long-term storage (2+ years)
-- [ ] OpenWrt / MikroTik / pfSense support
+- [x] ~~Modular architecture (server.js split into src/ modules)~~
+- [x] ~~SQLite-based persistent storage~~
+- [x] ~~Threat intelligence (C2/botnet detection via Feodo, ThreatFox, URLhaus, Spamhaus)~~
+- [x] ~~Connection log with sortable/searchable table~~
+- [x] ~~IPv4/IPv6 protocol badges (NDP detection)~~
 - [ ] Alert notifications (Slack/email webhook)
+- [ ] OpenWrt / MikroTik / pfSense support
+- [ ] DNS log monitoring (L7 visibility)
+- [ ] IPv6 traffic monitoring (packet mirror method)
+- [ ] AWS VPC Flow Logs integration
+- [ ] Mobile app (iOS/Android via Capacitor)
 - [ ] CSV/JSON export
 
 ## License
