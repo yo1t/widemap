@@ -19,8 +19,8 @@ global_settings:
       reason: 'False positive - password variable name in input validation, not a hardcoded secret'
     - path: 'docs/setup-yamaha.md'
       rule_id: 'SECRET-SECRET-KEYWORD'
-      line_start: 109
-      line_end: 109
+      line_start: 168
+      line_end: 168
       reason: 'False positive - example placeholder text (yourpassword) in documentation'
 
 scanners:

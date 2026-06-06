@@ -49,7 +49,66 @@ SSH service     : enable
 
 ---
 
-## Step 4 — Check the NAT descriptor number
+## Step 4 — Verify NAT is configured (set it up if not already)
+
+Widemap reads the NAT session table, so NAT (masquerade) must be running on the router first.
+
+Check the current configuration:
+
+```
+show nat descriptor
+```
+
+Expected output (NAT already configured):
+```
+NAT descriptor list:
+  100: masquerade
+```
+
+If you see `masquerade` listed, NAT is already set up. **Skip to Step 5.**
+
+---
+
+### If NAT is not configured — sample configuration
+
+> ⚠️ **All addresses below are dummy values. Replace them with your actual environment settings.**
+> Configuration varies by ISP and contract. Check your ISP's documentation or support if unsure.
+
+```
+# LAN interface address (change to your actual LAN address)
+ip lan1 address 192.168.1.1/24
+
+# Default route via WAN gateway (change to the gateway IP provided by your ISP)
+ip route default gateway 203.0.113.1
+
+# NAT descriptor
+nat descriptor type 100 masquerade
+nat descriptor address outer 100 primary
+
+# Basic security filters (block Windows file sharing ports, etc.)
+ip filter 200010 reject * * udp,tcp * 135
+ip filter 200020 reject * * udp,tcp 135 *
+ip filter 200030 reject * * tcp * 139
+ip filter 200040 reject * * tcp 139 *
+ip filter 500000 pass * * * * *
+
+# Apply NAT and filters to the WAN interface (change lan2 to your WAN port name)
+ip lan2 nat descriptor 100
+ip lan2 secure filter in 200010 200020 200030 200040
+ip lan2 secure filter out 500000
+
+# Save
+save
+```
+
+> **Common things to change:**
+> - `192.168.1.1/24` → your actual LAN address (e.g. `192.168.0.1/24`)
+> - `203.0.113.1` → the gateway IP from your ISP (PPPoE setups may use `pp 1` instead)
+> - `lan2` → your WAN port name (may be `lan2`, `pp 1`, etc. depending on your setup)
+
+---
+
+## Step 5 — Check the NAT descriptor number
 
 Widemap reads the NAT session table. Find the descriptor number used by your router:
 
@@ -67,7 +126,7 @@ Note this number (typically `100`). You will enter it in Widemap's Settings pane
 
 ---
 
-## Step 5 — Save the configuration
+## Step 6 — Save the configuration
 
 ```
 save
@@ -75,7 +134,7 @@ save
 
 ---
 
-## Step 6 — Test SSH connectivity from your PC/Mac
+## Step 7 — Test SSH connectivity from your PC/Mac
 
 ```bash
 ssh widemap@192.168.1.1
@@ -85,7 +144,7 @@ If you can log in successfully, the setup is complete.
 
 ---
 
-## Step 7 — Enter settings in Widemap
+## Step 8 — Enter settings in Widemap
 
 Open the Widemap Settings panel (⚙) and fill in:
 
