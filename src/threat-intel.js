@@ -51,6 +51,22 @@ function parseThreatFox(text) {
   return entries;
 }
 
+// Domains that host user-generated content — domain-level match has low confidence
+// (malware can be hosted there, but the domain itself is legitimate)
+const LOW_CONFIDENCE_DOMAINS = new Set([
+  'github.com', 'raw.githubusercontent.com', 'gist.githubusercontent.com',
+  'gitlab.com', 'bitbucket.org',
+  'drive.google.com', 'docs.google.com', 'storage.googleapis.com',
+  'dropbox.com', 'dl.dropboxusercontent.com',
+  'onedrive.live.com', '1drv.ms',
+  'cdn.discordapp.com', 'media.discordapp.net',
+  'pastebin.com', 'paste.ee',
+  'transfer.sh', 'anonfiles.com',
+  'amazonaws.com', 's3.amazonaws.com',
+  'cloudfront.net', 'azureedge.net', 'blob.core.windows.net',
+  'archive.org',
+]);
+
 function parseUrlhaus(text) {
   // CSV: skip comments (#), fields: id,dateadded,url,url_status,last_online,threat,tags,urlhaus_link,reporter
   const entries = [];
@@ -62,11 +78,16 @@ function parseUrlhaus(text) {
     try {
       const u = new URL(url);
       const host = u.hostname;
-      // If hostname is an IP, add to IP set; otherwise add to domain set
+      const parentDomain = host.split('.').slice(-2).join('.');
+      const isLowConf = LOW_CONFIDENCE_DOMAINS.has(host) || LOW_CONFIDENCE_DOMAINS.has(parentDomain);
+      const confidence = isLowConf ? 'low' : 'high';
+      const tag = isLowConf
+        ? `URLhaus: malware hosted on ${host} (正規サービス — 要パス確認)`
+        : 'URLhaus: malware distribution';
       if (host.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-        entries.push({ type: 'ip', value: host, source: 'urlhaus', tag: 'URLhaus: malware distribution' });
+        entries.push({ type: 'ip', value: host, source: 'urlhaus', tag, url, confidence });
       } else {
-        entries.push({ type: 'domain', value: host, source: 'urlhaus', tag: 'URLhaus: malware distribution' });
+        entries.push({ type: 'domain', value: host, source: 'urlhaus', tag, url, confidence });
       }
     } catch {}
   }
@@ -142,8 +163,8 @@ async function fetchThreatIntel() {
   if (results[2].status === 'fulfilled') {
     const entries = parseUrlhaus(results[2].value.data);
     for (const e of entries) {
-      if (e.type === 'ip') { threatIps.set(e.value, { source: e.source, tag: e.tag }); totalIps++; }
-      else { threatDomains.set(e.value, { source: e.source, tag: e.tag }); totalDomains++; }
+      if (e.type === 'ip') { threatIps.set(e.value, { source: e.source, tag: e.tag, url: e.url, confidence: e.confidence }); totalIps++; }
+      else { threatDomains.set(e.value, { source: e.source, tag: e.tag, url: e.url, confidence: e.confidence }); totalDomains++; }
     }
     console.log(`[threat-intel] URLhaus: ${entries.length} entries (IPs + domains)`);
   } else {
