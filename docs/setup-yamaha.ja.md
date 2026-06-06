@@ -49,7 +49,66 @@ SSH service     : enable
 
 ---
 
-## Step 4 — NAT ディスクリプタ番号を確認
+## Step 4 — NAT が設定されているか確認（まだの場合はサンプルを参考に設定）
+
+Widemap は NAT セッションテーブルを読み取るため、ルーターで NAT（masquerade）が動作していることが前提です。
+
+まず現在の設定を確認します：
+
+```
+show nat descriptor
+```
+
+出力例（正常）：
+```
+NAT descriptor list:
+  100: masquerade
+```
+
+上記のように `masquerade` が表示されていれば NAT は設定済みです。**Step 5 へ進んでください。**
+
+---
+
+### NAT が設定されていない場合 — 設定サンプル
+
+> ⚠️ **以下のアドレスはすべてダミーです。実際の環境に合わせて変更してください。**
+> プロバイダーや契約内容によって設定が異なります。不明な場合はプロバイダーのマニュアルまたはサポートに確認してください。
+
+```
+# LAN 側インターフェース（実際の LAN アドレスに変更）
+ip lan1 address 192.168.1.1/24
+
+# WAN 側デフォルトルート（プロバイダーから指定されたゲートウェイ IP に変更）
+ip route default gateway 203.0.113.1
+
+# NAT ディスクリプタの設定
+nat descriptor type 100 masquerade
+nat descriptor address outer 100 primary
+
+# 基本的なセキュリティフィルター（Windows ファイル共有等をブロック）
+ip filter 200010 reject * * udp,tcp * 135
+ip filter 200020 reject * * udp,tcp 135 *
+ip filter 200030 reject * * tcp * 139
+ip filter 200040 reject * * tcp 139 *
+ip filter 500000 pass * * * * *
+
+# WAN インターフェースに NAT とフィルターを適用（lan2 は WAN ポートの名称に変更）
+ip lan2 nat descriptor 100
+ip lan2 secure filter in 200010 200020 200030 200040
+ip lan2 secure filter out 500000
+
+# 設定を保存
+save
+```
+
+> **よくある変更点:**
+> - `192.168.1.1/24` → 実際の LAN アドレス（例: `192.168.0.1/24`）
+> - `203.0.113.1` → プロバイダーから指定されたゲートウェイ IP（PPPoE の場合は `pp 1` を使う場合もあり）
+> - `lan2` → WAN ポートの名称（環境によって `lan2` / `pp 1` 等が異なる）
+
+---
+
+## Step 5 — NAT ディスクリプタ番号を確認
 
 Widemap は NAT セッションテーブルを読み取ります。ルーターで使用しているディスクリプタ番号を確認します：
 
@@ -67,7 +126,7 @@ NAT descriptor list:
 
 ---
 
-## Step 5 — 設定を保存
+## Step 6 — 設定を保存
 
 ```
 save
@@ -75,7 +134,7 @@ save
 
 ---
 
-## Step 6 — PC/Mac から SSH 接続をテスト
+## Step 7 — PC/Mac から SSH 接続をテスト
 
 ```bash
 ssh widemap@192.168.1.1
@@ -85,7 +144,7 @@ ssh widemap@192.168.1.1
 
 ---
 
-## Step 7 — Widemap に設定を入力
+## Step 8 — Widemap に設定を入力
 
 Widemap の設定パネル（⚙）を開き、以下を入力します：
 
