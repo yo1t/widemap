@@ -250,21 +250,6 @@ SSH接続とNATディスクリプタに対応した全モデル：
 - RT-ACシリーズ
 - ZenWiFi（AiMesh）
 
-## ロードマップ
-
-- [x] ~~モジュール分割（server.js → src/ ディレクトリ構造）~~
-- [x] ~~SQLiteベースの永続ストレージ~~
-- [x] ~~脅威インテリジェンス連携（Feodo, ThreatFox, URLhaus, Spamhaus）~~
-- [x] ~~通信ログ（ソート・検索・脅威ポップアップ）~~
-- [x] ~~IPv4/IPv6プロトコルバッジ（NDP検出）~~
-- [x] ~~アラート通知（Slack DM — 脅威検出通知・クールダウン・言語対応）~~
-- [ ] OpenWrt / MikroTik / pfSense 対応
-- [ ] DNSログ監視（L7可視化）
-- [ ] IPv6通信先可視化（パケットミラー方式）
-- [ ] AWS VPC Flow Logs 連携
-- [ ] モバイルアプリ（iOS/Android、Capacitor）
-- [ ] CSV/JSONエクスポート
-
 ## ライセンス
 
 [AGPL-3.0](LICENSE) — このソフトウェアを改変してネットワークサービスとして提供する場合、変更内容を公開する必要があります。

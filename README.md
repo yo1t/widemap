@@ -250,21 +250,6 @@ Any model with the standard web admin interface, used in AP mode or AiMesh:
 - RT-AC series
 - ZenWiFi (AiMesh)
 
-## Roadmap
-
-- [x] ~~Modular architecture (server.js split into src/ modules)~~
-- [x] ~~SQLite-based persistent storage~~
-- [x] ~~Threat intelligence (C2/botnet detection via Feodo, ThreatFox, URLhaus, Spamhaus)~~
-- [x] ~~Connection log with sortable/searchable table~~
-- [x] ~~IPv4/IPv6 protocol badges (NDP detection)~~
-- [x] ~~Alert notifications (Slack DM — threat detection with cooldown and language support)~~
-- [ ] OpenWrt / MikroTik / pfSense support
-- [ ] DNS log monitoring (L7 visibility)
-- [ ] IPv6 traffic monitoring (packet mirror method)
-- [ ] AWS VPC Flow Logs integration
-- [ ] Mobile app (iOS/Android via Capacitor)
-- [ ] CSV/JSON export
-
 ## License
 
 [AGPL-3.0](LICENSE) — If you modify and deploy this as a network service, you must share your changes.
