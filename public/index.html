@@ -246,8 +246,11 @@
   .log-search-popup.hidden { display: none; }
   .log-search-popup-inner { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); min-width: 220px; }
   .log-search-popup-title { font-size: 11px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
-  .log-search-popup select, .log-search-popup input { width: 100%; padding: 5px 8px; margin-bottom: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 11px; font-family: inherit; }
+  .log-search-popup select, .log-search-popup input[type="text"] { width: 100%; padding: 5px 8px; margin-bottom: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 11px; font-family: inherit; }
   .log-search-popup input:focus { border-color: var(--accent); outline: none; }
+  .log-date-input { width: 100%; padding: 5px 8px; margin-bottom: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 11px; font-family: inherit; }
+  .log-date-input:focus { border-color: var(--accent); outline: none; }
+  #log-search-date-range { display: flex; flex-direction: column; gap: 2px; }
   .log-search-popup-actions { display: flex; gap: 4px; }
   .log-search-popup-actions button { flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text); font-size: 10px; cursor: pointer; }
   .log-search-popup-actions button:hover { border-color: var(--accent); }
@@ -772,7 +775,7 @@
             <th data-col="proto"><span data-i18n="log.col.proto">Proto</span> <span class="log-sort-icon">⇅</span><span class="log-search-icon" data-col="proto">🔍</span></th>
             <th data-col="country"><span data-i18n="log.col.country">国</span> <span class="log-sort-icon">⇅</span><span class="log-search-icon" data-col="country">🔍</span></th>
             <th data-col="org"><span data-i18n="log.col.org">組織</span> <span class="log-sort-icon">⇅</span><span class="log-search-icon" data-col="org">🔍</span></th>
-            <th data-col="lastSeen"><span data-i18n="log.col.lastSeen">最終通信</span> <span class="log-sort-icon">⇅</span></th>
+            <th data-col="lastSeen"><span data-i18n="log.col.lastSeen">最終通信</span> <span class="log-sort-icon">⇅</span><span class="log-search-icon" data-col="lastSeen">🔍</span></th>
           </tr>
         </thead>
         <tbody id="log-tbody"></tbody>
@@ -789,6 +792,12 @@
           <option value="regex" data-i18n="log.filter.regex">正規表現</option>
         </select>
         <input type="text" id="log-search-input" data-i18n-placeholder="log.filter.placeholder" placeholder="検索条件..." autocomplete="off">
+        <div id="log-search-date-range" style="display:none">
+          <label style="font-size:10px;color:var(--muted);" data-i18n="log.filter.from">開始</label>
+          <input type="datetime-local" id="log-search-from" class="log-date-input">
+          <label style="font-size:10px;color:var(--muted);margin-top:4px;" data-i18n="log.filter.to">終了</label>
+          <input type="datetime-local" id="log-search-to" class="log-date-input">
+        </div>
         <div class="log-search-popup-actions">
           <button id="log-search-apply" data-i18n="log.filter.apply">適用</button>
           <button id="log-search-clear" data-i18n="log.filter.clear">クリア</button>
@@ -941,6 +950,7 @@ const I18N = {
     'log.filter.endsWith':'で終わる', 'log.filter.regex':'正規表現',
     'log.filter.placeholder':'検索条件...',
     'log.filter.apply':'適用', 'log.filter.clear':'クリア', 'log.filter.close':'閉じる',
+    'log.filter.from':'開始', 'log.filter.to':'終了',
     'log.badge.safe':'未検出', 'log.badge.danger':'要注意',
   },  en: {
     'tab.graph': '📊 Graph Map', 'tab.map': '🗺 World Map', 'tab.stats': '📈 Statistics', 'tab.log': '📋 Conn Log',
@@ -1014,6 +1024,7 @@ const I18N = {
     'log.filter.endsWith':'Ends with', 'log.filter.regex':'Regex',
     'log.filter.placeholder':'Search...',
     'log.filter.apply':'Apply', 'log.filter.clear':'Clear', 'log.filter.close':'Close',
+    'log.filter.from':'From', 'log.filter.to':'To',
     'log.badge.safe':'Clear', 'log.badge.danger':'Alert',
   },
 };
@@ -2998,7 +3009,15 @@ function getLogCellValue(c, col) {
 }
 
 function logMatchFilter(value, filter) {
-  if (!filter || !filter.value) return true;
+  if (!filter) return true;
+  // Date range mode
+  if (filter.mode === 'dateRange') {
+    const ts = parseInt(value) || 0;
+    if (filter.from) { const fromTs = new Date(filter.from).getTime(); if (ts < fromTs) return false; }
+    if (filter.to)   { const toTs = new Date(filter.to).getTime(); if (ts > toTs) return false; }
+    return true;
+  }
+  if (!filter.value) return true;
   const v = value.toLowerCase();
   const f = filter.value.toLowerCase();
   switch (filter.mode) {
@@ -3113,28 +3132,61 @@ document.querySelectorAll('.log-search-icon').forEach(icon => {
     const col = icon.dataset.col;
     logSearchTargetCol = col;
     document.getElementById('log-search-popup-title').textContent = `${t('log.filter.title')}: ${t('log.col.' + col)}`;
-    // Restore existing filter
-    const existing = logFilters[col];
-    logSearchMode.value = existing?.mode || 'contains';
-    logSearchInput.value = existing?.value || '';
+
+    const isDateCol = (col === 'lastSeen');
+    const textMode = document.getElementById('log-search-mode');
+    const textInput = document.getElementById('log-search-input');
+    const dateRange = document.getElementById('log-search-date-range');
+
+    if (isDateCol) {
+      textMode.style.display = 'none';
+      textInput.style.display = 'none';
+      dateRange.style.display = 'flex';
+      // Restore existing date filter
+      const existing = logFilters[col];
+      document.getElementById('log-search-from').value = existing?.from || '';
+      document.getElementById('log-search-to').value = existing?.to || '';
+    } else {
+      textMode.style.display = '';
+      textInput.style.display = '';
+      dateRange.style.display = 'none';
+      // Restore existing filter
+      const existing = logFilters[col];
+      logSearchMode.value = existing?.mode || 'contains';
+      logSearchInput.value = existing?.value || '';
+    }
+
     // Position popup near the icon
     const rect = icon.getBoundingClientRect();
     logSearchPopup.style.top = (rect.bottom + 4) + 'px';
     logSearchPopup.style.left = Math.min(rect.left, window.innerWidth - 240) + 'px';
     logSearchPopup.classList.remove('hidden');
-    logSearchInput.focus();
+    if (!isDateCol) logSearchInput.focus();
   });
 });
 
 document.getElementById('log-search-apply').addEventListener('click', () => {
   if (!logSearchTargetCol) return;
-  const val = logSearchInput.value.trim();
-  if (val) {
-    logFilters[logSearchTargetCol] = { mode: logSearchMode.value, value: val };
-    document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.add('active');
+
+  if (logSearchTargetCol === 'lastSeen') {
+    const from = document.getElementById('log-search-from').value;
+    const to = document.getElementById('log-search-to').value;
+    if (from || to) {
+      logFilters[logSearchTargetCol] = { mode: 'dateRange', from, to };
+      document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.add('active');
+    } else {
+      delete logFilters[logSearchTargetCol];
+      document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.remove('active');
+    }
   } else {
-    delete logFilters[logSearchTargetCol];
-    document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.remove('active');
+    const val = logSearchInput.value.trim();
+    if (val) {
+      logFilters[logSearchTargetCol] = { mode: logSearchMode.value, value: val };
+      document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.add('active');
+    } else {
+      delete logFilters[logSearchTargetCol];
+      document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.remove('active');
+    }
   }
   logSearchPopup.classList.add('hidden');
   updateLogView();
@@ -3145,6 +3197,8 @@ document.getElementById('log-search-clear').addEventListener('click', () => {
   delete logFilters[logSearchTargetCol];
   document.querySelector(`.log-search-icon[data-col="${logSearchTargetCol}"]`)?.classList.remove('active');
   logSearchInput.value = '';
+  document.getElementById('log-search-from').value = '';
+  document.getElementById('log-search-to').value = '';
   logSearchPopup.classList.add('hidden');
   updateLogView();
 });
