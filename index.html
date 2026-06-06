@@ -240,8 +240,16 @@
         <p>Automatic reverse DNS, RDAP organization lookup, and GeoIP (city-level latitude/longitude) for every destination.</p>
       </div>
       <div class="card">
-        <h3>7-Day History</h3>
-        <p>Persistent connection history with time-series charts, per-destination statistics, and session-count bar graphs.</p>
+        <h3>7-Day History (SQLite)</h3>
+        <p>Persistent connection history in SQLite (WAL mode, crash-safe) with time-series charts, per-destination statistics, and session-count bar graphs.</p>
+      </div>
+      <div class="card">
+        <h3>🛡️ Threat Detection</h3>
+        <p>Matches all connections against Feodo Tracker, ThreatFox, URLhaus, and Spamhaus DROP. Three confidence levels with actionable guidance.</p>
+      </div>
+      <div class="card">
+        <h3>📋 Connection Log</h3>
+        <p>Sortable, searchable table of all sessions. Per-column filters (text, regex, date range). Threat rows highlighted with click-to-detail popup.</p>
       </div>
     </div>
   </section>
@@ -280,16 +288,18 @@
 └─────────────────┘          │   Server     │◄──────────► Browser
 ┌─────────────────┐  HTTP    │  (Node.js)   │
 │  ASUS WiFi AP   │◄────────►│              │
-│  (Client list)  │          └──────────────┘
-└─────────────────┘               │
-                          ┌───────┴───────┐
-                          │ Enrichment    │
-                          │ • Reverse DNS │
-                          │ • RDAP (org)  │
-                          │ • GeoIP       │
-                          │ • OUI vendor  │
-                          │ • mDNS/SSDP   │
-                          └───────────────┘</code></pre>
+│  (Client list)  │          └──────┬───────┘
+└─────────────────┘                 │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+              ┌─────┴─────┐  ┌─────┴─────┐  ┌─────┴─────┐
+              │ Enrichment│  │  Threat   │  │  SQLite   │
+              │ • Rev DNS │  │  Intel    │  │  History  │
+              │ • RDAP    │  │ • Feodo   │  │  (WAL)    │
+              │ • GeoIP   │  │ • TFox    │  └───────────┘
+              │ • OUI     │  │ • URLhaus │
+              │ • mDNS    │  │ • DROP    │
+              └───────────┘  └───────────┘</code></pre>
     </div>
   </section>
 
