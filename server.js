@@ -389,6 +389,7 @@ server.listen(PORT, () => {
   runtime.setKnownMacs(history.getKnownMacs());
   devices.initDb();
   devices.seedFromConnectionHistory(history.getConnectionHistory());
+  enrichment.initDb();
   console.log(`Router IP: ${asus.getRouterIp()}`);
   deviceId.loadOuiDb();
   yamaha.connectYamaha(() => {
