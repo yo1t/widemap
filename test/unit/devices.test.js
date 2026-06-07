@@ -96,3 +96,25 @@ describe('devices.seedFromConnectionHistory', () => {
     assert.equal(d.dnsName, 'gdev.local');
   });
 });
+
+describe('devices.reopen', () => {
+  it('reopen() clears stale data — simulates post-restore state', () => {
+    // Arrange: insert a device with the current (pre-restore) connection
+    devicesModule.upsert({ ip: '192.168.1.50', mac: 'de:ad:be:ef:00:01', source: 'nat' });
+    assert.equal(devicesModule.getAll().length, 1);
+
+    // Act: reopen() closes and reinitialises the in-memory DB
+    // (In production this reopens the .widemap.db file after backup replaced it;
+    //  here we reopen :memory: which starts empty — same observable effect)
+    devicesModule.reopen();
+
+    // Assert: stale data is no longer visible through the module
+    assert.equal(devicesModule.getAll().length, 0);
+  });
+
+  it('reopen() keeps the module operational (upsert after reopen works)', () => {
+    devicesModule.reopen();
+    devicesModule.upsert({ ip: '10.0.0.99', source: 'dhcp' });
+    assert.equal(devicesModule.getByIp('10.0.0.99')?.ip, '10.0.0.99');
+  });
+});

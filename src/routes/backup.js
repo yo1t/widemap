@@ -16,7 +16,7 @@ const UPLOAD_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
  * }} ctx
  */
 module.exports = function backupRoutes(ctx) {
-  const { requireAdmin, backup, history, runtime, appRoot } = ctx;
+  const { requireAdmin, backup, history, runtime, devices, appRoot } = ctx;
   const router = Router();
 
   router.get('/backup/list', requireAdmin, (req, res) => {
@@ -42,6 +42,7 @@ module.exports = function backupRoutes(ctx) {
       backup.restoreFromGeneration(name);
       history.loadConnectionHistory();
       runtime.setKnownMacs(history.getKnownMacs());
+      devices.reopen();                               // re-open DB connection to read restored data
       res.json({ success: true, message: `Restored from ${name}. Restart recommended.` });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -76,6 +77,7 @@ module.exports = function backupRoutes(ctx) {
         fs.unlinkSync(tempPath);
         history.loadConnectionHistory();
         runtime.setKnownMacs(history.getKnownMacs());
+        devices.reopen();                             // re-open DB connection to read restored data
         res.json({ success: true, message: 'Restored from uploaded file. Restart recommended.' });
       } catch (e) {
         res.status(500).json({ error: e.message });
