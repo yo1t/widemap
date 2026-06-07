@@ -7,7 +7,8 @@ const path = require('path');
 
 const DB_PATH = path.join(__dirname, '..', '.widemap.db');
 
-let db = null;
+let db        = null;
+let _dbPath   = DB_PATH;   // remembers the path used, so reopen() uses the same one
 let stmtUpsert   = null;
 let stmtSelectAll = null;
 let stmtSelectIp  = null;
@@ -17,7 +18,8 @@ let stmtSelectMac = null;
 
 function initDb(dbPath) {
   // Re-use connection history DB (same file), or use provided path for tests
-  db = new Database(dbPath || DB_PATH);
+  _dbPath = dbPath || DB_PATH;
+  db = new Database(_dbPath);
   db.pragma('journal_mode = WAL');
   db.pragma('busy_timeout = 5000');
 
@@ -146,6 +148,18 @@ function seedFromConnectionHistory(connectionHistory) {
   seed();
 }
 
+// ─── Reopen (after backup restore) ────────────────────────────────────────────
+
+/**
+ * Close the current connection and reopen the DB file.
+ * Call this after backup.restoreFromGeneration / restoreFromFile so the module
+ * reads the restored data rather than the stale in-memory SQLite connection.
+ */
+function reopen() {
+  if (db) { try { db.close(); } catch {} db = null; }
+  initDb(_dbPath);   // reopen the same file that was used at startup (or ':memory:' in tests)
+}
+
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
 function _initForTest() {
@@ -157,6 +171,7 @@ function _initForTest() {
 
 module.exports = {
   initDb,
+  reopen,
   upsert,
   getAll,
   getByIp,
