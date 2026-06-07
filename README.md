@@ -252,7 +252,14 @@ Any model with the standard web admin interface, used in AP mode or AiMesh:
 
 ## License
 
-[AGPL-3.0](LICENSE) — If you modify and deploy this as a network service, you must share your changes.
+Widemap is dual-licensed:
+
+- Open source license: [GNU Affero General Public License v3.0](LICENSE)
+- Commercial license: available separately for proprietary or closed-source use
+
+You may use, modify, and distribute Widemap under the AGPL-3.0. If you include Widemap or derivative works in a proprietary product, distribute it without source code, or provide a modified version as a network service, you must comply with the AGPL-3.0 source code obligations.
+
+If you want to use Widemap in a proprietary or closed-source commercial product without releasing the corresponding source code under the AGPL-3.0, you must obtain a commercial license from the copyright holder.
 
 ```
 Widemap — Real-time network connection visualizer

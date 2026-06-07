@@ -2,6 +2,7 @@
   "name": "widemap",
   "version": "1.0.0",
   "description": "Widemap — Where Is Data Exiting? Map All Paths. Real-time visualisation of LAN devices and their internet destinations.",
+  "license": "AGPL-3.0-only",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

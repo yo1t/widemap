@@ -219,6 +219,16 @@ function pruneHistory() {
 
 function getConnectionHistory() { return connectionHistory; }
 
+function queryByTimeRange(from, to) {
+  if (!db) return [];
+  const conditions = [];
+  const params = [];
+  if (from != null) { conditions.push('lastSeen >= ?'); params.push(from); }
+  if (to   != null) { conditions.push('lastSeen <= ?'); params.push(to); }
+  const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+  return db.prepare(`SELECT * FROM connections${where} ORDER BY lastSeen DESC`).all(...params);
+}
+
 function getKnownMacs() {
   if (!db) return new Set();
   return new Set(
@@ -245,6 +255,7 @@ module.exports = {
   compactHistoryLog,
   pruneHistory,
   getConnectionHistory,
+  queryByTimeRange,
   getKnownMacs,
   setRetentionDays,
   closeDb,
