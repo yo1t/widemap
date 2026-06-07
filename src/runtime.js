@@ -9,6 +9,7 @@ let _asus, _yamaha, _dhcpdSyslog;
 // ─── Module state ─────────────────────────────────────────────────────────────
 let knownMacs = new Set();
 let inspectEmitTimer = null;
+let lastInspectEmitTime = Date.now(); // 差分 push 用: 前回 emit 以降の更新分のみ送信
 
 /**
  * Inject all external dependencies.
@@ -38,14 +39,23 @@ function scheduleInspectEmit() {
   if (inspectEmitTimer) return;
   inspectEmitTimer = setTimeout(() => {
     inspectEmitTimer = null;
-    const cutoff = Date.now() - 86400_000;
+    const now = Date.now();
+    // 差分 push: 前回 emit 以降に lastSeen が更新されたエントリのみ送信
+    const deltaConns = [..._history.getConnectionHistory().values()]
+      .filter(c => c.lastSeen > lastInspectEmitTime);
+    lastInspectEmitTime = now;
+    if (!deltaConns.length) return;
     _io.emit('connections-update', {
-      connections: [..._history.getConnectionHistory().values()].filter(c => c.lastSeen >= cutoff),
-      serverTime:  Date.now(),
+      connections: deltaConns,
+      serverTime:  now,
       partial:     true,
+      delta:       true,
     });
   }, 1000);
 }
+
+// テスト用: lastInspectEmitTime をリセット
+function _resetInspectEmitTime(t) { lastInspectEmitTime = t ?? Date.now(); }
 
 // ─── MAC resolution ───────────────────────────────────────────────────────────
 
@@ -191,4 +201,5 @@ module.exports = {
   handleInspectSession,
   getKnownMacs,
   setKnownMacs,
+  _resetInspectEmitTime,
 };

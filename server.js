@@ -60,6 +60,9 @@ const appState = {
   dhcpdEnabled:   true,  dhcpdLogFile:   '/var/log/yamaha-router.log',
 };
 
+// 差分 push 用タイムスタンプ: 前回 broadcast 以降に更新された接続だけを送信するため
+let lastPollEmitTime = Date.now();
+
 // ─── Express + Socket.IO setup ────────────────────────────────────────────────
 const app    = express();
 const server = http.createServer(app);
@@ -215,12 +218,21 @@ async function pollYamahaConnections() {
 
     history.pruneHistory();
 
-    const pollCutoff = now - 86400_000;
-    io.emit('connections-update', {
-      connections: [...history.getConnectionHistory().values()].filter(c => c.lastSeen >= pollCutoff),
-      serverTime:  now,
-      partial:     true,
-    });
+    // 差分 push: 前回 emit 以降に lastSeen が更新されたエントリのみ送信
+    const deltaConns = [...history.getConnectionHistory().values()]
+      .filter(c => c.lastSeen > lastPollEmitTime);
+    lastPollEmitTime = now;
+    if (deltaConns.length > 0) {
+      io.emit('connections-update', {
+        connections: deltaConns,
+        serverTime:  now,
+        partial:     true,
+        delta:       true,
+      });
+      console.log(`[yamaha] emit delta: ${deltaConns.length} connections (of ${history.getConnectionHistory().size} total)`);
+    } else {
+      console.log('[yamaha] emit delta: 0 changes, skipped');
+    }
 
     if (appState.autoInvestigate) {
       const srcIps = [...new Set(sessions.map(s => s.src))];
