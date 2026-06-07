@@ -930,6 +930,7 @@
     <div class="log-header">
       <span class="log-title" data-i18n="log.title">📋 通信ログ</span>
       <span id="log-count" style="color:var(--muted);font-size:11px;margin-left:8px;"></span>
+      <span id="log-device-filter" style="margin-left:8px;display:none"></span>
       <span id="log-threat-count" style="margin-left:8px;"></span>
     </div>
     <div class="log-table-wrap">
@@ -1571,6 +1572,7 @@ let simulation = null;
 let nodes = [], links = [];
 let maxRate = 1024 * 512;
 let selectedMac = null;
+let selectedIp = null;
 let currentFilter = 'all';
 let lastMeshNodes = [];
 let lastRouterIp = '';
@@ -1736,12 +1738,14 @@ function drawNodes() {
     )
     .on('click', (e, d) => {
       selectedMac = d.id === selectedMac ? null : d.id;
+      const selNode = nodes.find(n => n.id === selectedMac);
+      selectedIp = selectedMac ? (selNode?.client?.ip || null) : null;
       updateSideHighlight();
       applyGraphFilter();
       if (mapMode) updateMapDots();
       if (statsMode) updateStats();
-      const selNode = nodes.find(n => n.id === selectedMac);
-      updateConnPanel(selNode?.client?.ip || null);
+      updateConnPanel(selectedIp);
+      if (logMode) updateLogView();
     })
     .on('mouseenter', showTooltip).on('mousemove', moveTooltip).on('mouseleave', hideTooltip);
 
@@ -1918,11 +1922,13 @@ function updateSidePanel(clients, data, meshNodes, mainMac) {
         </div>`;
       card.addEventListener('click', () => {
         selectedMac = c.mac === selectedMac ? null : c.mac;
+        selectedIp = selectedMac ? c.ip : null;
         updateSideHighlight();
         applyGraphFilter();
         if (mapMode) updateMapDots();
         if (statsMode) updateStats();
         updateConnPanel(selectedMac ? c.ip : null);
+        if (logMode) updateLogView();
       });
       // Only the edit-icon click opens the edit modal
       card.querySelector('.device-note-edit').addEventListener('click', (e) => {
@@ -1966,7 +1972,7 @@ function updateSidePanel(clients, data, meshNodes, mainMac) {
     }
     const nodeBadgeText = papNode?.model?.replace(/RT-BE/,'') || 'Main';
     badgeHtml += `<span class="node-badge" style="background:${nodeColor}22;color:${nodeColor};border:1px solid ${nodeColor}44">${nodeBadgeText}</span>`;
-    if (c.deviceFirstSeen && Date.now() - c.deviceFirstSeen < 60 * 60 * 1000) {
+    if (c.deviceFirstSeen && Date.now() - c.deviceFirstSeen < 24 * 60 * 60 * 1000) {
       badgeHtml += `<span class="new-badge">${t('device.new')}</span>`;
     }
     const metaText = metaParts.length ? ' ' + metaParts.join(' · ') : '';
@@ -3632,6 +3638,25 @@ function updateLogView() {
   const threatCountEl = document.getElementById('log-threat-count');
 
   let conns = getFilteredConnections();
+
+  // Apply device filter (when a device is selected in the sidebar)
+  const deviceFilterEl = document.getElementById('log-device-filter');
+  if (selectedIp) {
+    conns = conns.filter(c => c.src === selectedIp || (selectedMac && c.srcMac === selectedMac));
+    if (deviceFilterEl) {
+      deviceFilterEl.style.display = 'inline';
+      deviceFilterEl.innerHTML = `<span style="background:var(--accent);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;cursor:pointer" title="${esc(t('log.deviceFilter.clear') || 'クリア')}" id="log-device-filter-clear">${esc(selectedIp)} のみ ✕</span>`;
+      const clearBtn = document.getElementById('log-device-filter-clear');
+      if (clearBtn) clearBtn.addEventListener('click', () => {
+        selectedMac = null;
+        selectedIp = null;
+        updateSideHighlight();
+        updateLogView();
+      });
+    }
+  } else {
+    if (deviceFilterEl) deviceFilterEl.style.display = 'none';
+  }
 
   // Apply column filters
   for (const [col, filter] of Object.entries(logFilters)) {
