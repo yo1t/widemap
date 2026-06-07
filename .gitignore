@@ -36,3 +36,4 @@ id_ed25519*
 .ash/
 # テストのベースライン（実機データに依存）
 test/fixtures/baseline.json
+.widemap.pid
