@@ -30,7 +30,7 @@ describe('Frontend TDZ lint', () => {
     
     // Simpler approach: just verify no remaining `let` declarations exist for
     // variables that we know are used in resize() or top-level init code.
-    const riskyVars = ['mapMode', 'statsMode', 'logMode', 'currentView', 'homeCountry',
+    const riskyVars = ['mapMode', 'statsMode', 'logMode', 'devicesMode', 'currentView', 'homeCountry',
       'worldGeo', 'mapSvg', 'mapG', 'mapProjection', 'mapPath', 'currentMapK',
       'mapParticles', 'mapAnimId'];
     
@@ -43,6 +43,36 @@ describe('Frontend TDZ lint', () => {
     }
     
     assert.equal(problems.length, 0, `TDZ risks (let used for hoisted vars):\n  ${problems.join('\n  ')}`);
+  });
+
+  it('API fetches use apiFetch (not raw fetch with adminToken)', () => {
+    // Raw fetch() with 'adminToken' key would use the wrong localStorage key
+    // (correct key is TOKEN_KEY = 'widemap_admin_token', accessed via apiFetch)
+    const rawFetchWithWrongToken = /fetch\([^)]+\)\s*,\s*\{[^}]*'adminToken'[^}]*\}/;
+    const badLines = lines
+      .map((line, i) => ({ line, num: i + 1 }))
+      .filter(({ line }) => /localStorage\.getItem\(['"]adminToken['"]\)/.test(line));
+    assert.equal(badLines.length, 0,
+      `Found raw fetch using wrong localStorage key 'adminToken' (should use apiFetch):\n  ` +
+      badLines.map(l => `L${l.num}: ${l.line.trim()}`).join('\n  '));
+  });
+
+  it('all view containers toggled in switchView exist in HTML', () => {
+    // Extract container IDs from switchView display toggles
+    const toggleRe = /getElementById\(['"]([^'"]+)['"]\)\.style\.display\s*=\s*view\s*===\s*['"][^'"]+['"]\s*\?/g;
+    const toggled = [];
+    let m;
+    while ((m = toggleRe.exec(script)) !== null) {
+      toggled.push(m[1]);
+    }
+    const htmlIds = new Set();
+    const idRe = /\bid=["']([^"']+)["']/g;
+    while ((m = idRe.exec(html)) !== null) {
+      htmlIds.add(m[1]);
+    }
+    const missing = toggled.filter(id => !htmlIds.has(id));
+    assert.equal(missing.length, 0,
+      `switchView toggles missing HTML ids:\n  ${[...new Set(missing)].join('\n  ')}`);
   });
 
   it('getElementById targets exist in HTML', () => {
