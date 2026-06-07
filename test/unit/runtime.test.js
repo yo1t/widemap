@@ -1,9 +1,9 @@
-// Unit tests for src/runtime.js (recordConnection, resolveMacByIp)
+// Unit tests for src/runtime.js (recordConnection, resolveMacByIp, scheduleInspectEmit)
 // All external dependencies are replaced with lightweight stubs.
 // Run: node --test test/unit/runtime.test.js
 'use strict';
 
-const { describe, it, beforeEach } = require('node:test');
+const { describe, it, beforeEach, mock } = require('node:test');
 const assert = require('node:assert/strict');
 const runtime = require('../../src/runtime');
 
@@ -206,5 +206,103 @@ describe('recordConnection', () => {
     runtime.recordConnection(SESSION);
     assert.equal(devs._upserted.length, 1);
     assert.equal(devs._upserted[0].ip, SESSION.src);
+  });
+});
+
+// ─── scheduleInspectEmit: delta push tests ────────────────────────────────────
+
+describe('scheduleInspectEmit: delta push', () => {
+  it('送信される接続は lastInspectEmitTime より新しいエントリのみ', (t) => {
+    t.mock.timers.enable(['setTimeout']);
+    const io   = makeIo();
+    const hist = makeHistory();
+    initRuntime({ io, history: hist });
+
+    const base = 1_000_000;
+    // 古いエントリ (base - 1): emit 対象外
+    hist.getConnectionHistory().set('old', { src: '192.168.1.1', dst: '1.1.1.1', dport: 53, proto: 'UDP', lastSeen: base - 1 });
+    // 新しいエントリ (base + 1): emit 対象
+    hist.getConnectionHistory().set('new', { src: '192.168.1.2', dst: '8.8.8.8', dport: 53, proto: 'UDP', lastSeen: base + 1 });
+
+    runtime._resetInspectEmitTime(base);
+    runtime.scheduleInspectEmit();
+    t.mock.timers.tick(1000);
+
+    const emits = io._emitted.filter(e => e[0] === 'connections-update');
+    assert.equal(emits.length, 1);
+    assert.equal(emits[0][1].connections.length, 1);
+    assert.equal(emits[0][1].connections[0].dst, '8.8.8.8');
+  });
+
+  it('差分ゼロのとき emit を送らない', (t) => {
+    t.mock.timers.enable(['setTimeout']);
+    const io   = makeIo();
+    const hist = makeHistory();
+    initRuntime({ io, history: hist });
+
+    const base = 1_000_000;
+    // 古いエントリのみ
+    hist.getConnectionHistory().set('old', { src: '192.168.1.1', dst: '1.1.1.1', dport: 53, proto: 'UDP', lastSeen: base - 1 });
+
+    runtime._resetInspectEmitTime(base);
+    runtime.scheduleInspectEmit();
+    t.mock.timers.tick(1000);
+
+    const emits = io._emitted.filter(e => e[0] === 'connections-update');
+    assert.equal(emits.length, 0, 'emit が送られないこと');
+  });
+
+  it('delta: true と partial: true が付与される', (t) => {
+    t.mock.timers.enable(['setTimeout']);
+    const io   = makeIo();
+    const hist = makeHistory();
+    initRuntime({ io, history: hist });
+
+    const base = 1_000_000;
+    hist.getConnectionHistory().set('new', { src: '192.168.1.2', dst: '8.8.8.8', dport: 443, proto: 'TCP', lastSeen: base + 1 });
+
+    runtime._resetInspectEmitTime(base);
+    runtime.scheduleInspectEmit();
+    t.mock.timers.tick(1000);
+
+    const emits = io._emitted.filter(e => e[0] === 'connections-update');
+    assert.equal(emits[0][1].partial, true);
+    assert.equal(emits[0][1].delta,   true);
+  });
+
+  it('複数回 scheduleInspectEmit を呼んでも emit は1回（debounce）', (t) => {
+    t.mock.timers.enable(['setTimeout']);
+    const io   = makeIo();
+    const hist = makeHistory();
+    initRuntime({ io, history: hist });
+
+    const base = 1_000_000;
+    hist.getConnectionHistory().set('a', { src: '192.168.1.1', dst: '1.1.1.1', dport: 80, proto: 'TCP', lastSeen: base + 1 });
+
+    runtime._resetInspectEmitTime(base);
+    runtime.scheduleInspectEmit();
+    runtime.scheduleInspectEmit(); // 2回目は無視される
+    runtime.scheduleInspectEmit(); // 3回目も無視
+    t.mock.timers.tick(1000);
+
+    const emits = io._emitted.filter(e => e[0] === 'connections-update');
+    assert.equal(emits.length, 1, 'emit は1回のみ');
+  });
+
+  it('lastInspectEmitTime が 0 のとき全エントリが送られる', (t) => {
+    t.mock.timers.enable(['setTimeout']);
+    const io   = makeIo();
+    const hist = makeHistory();
+    initRuntime({ io, history: hist });
+
+    hist.getConnectionHistory().set('a', { src: '192.168.1.1', dst: '1.1.1.1', dport: 80,  proto: 'TCP', lastSeen: 1000 });
+    hist.getConnectionHistory().set('b', { src: '192.168.1.2', dst: '2.2.2.2', dport: 443, proto: 'TCP', lastSeen: 2000 });
+
+    runtime._resetInspectEmitTime(0); // 全エントリが対象になる
+    runtime.scheduleInspectEmit();
+    t.mock.timers.tick(1000);
+
+    const emits = io._emitted.filter(e => e[0] === 'connections-update');
+    assert.equal(emits[0][1].connections.length, 2);
   });
 });
