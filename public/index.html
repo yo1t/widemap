@@ -3353,7 +3353,7 @@ function updateStats() {
   for (const o of topOrgs) series.set(o, new Array(buckets).fill(0));
   series.set('__other__', new Array(buckets).fill(0));
   for (const c of conns) {
-    const t = c.firstSeen || c.lastSeen || 0;
+    const t = c.lastSeen || c.firstSeen || 0;
     const bi = Math.min(buckets - 1, Math.max(0, Math.floor((t - fromT) / bw)));
     const key = c.org || c.dstHost || c.dst;
     const arr = topOrgs.includes(key) ? series.get(key) : series.get('__other__');
