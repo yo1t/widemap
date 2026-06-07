@@ -17,6 +17,7 @@ const notifier = require('./src/notifier');
 const backup = require('./src/backup');
 const yamaha = require('./src/pollers/yamaha');
 const asus = require('./src/pollers/asus');
+const dnsmasqLog = require('./src/pollers/dnsmasq-log');
 
 const app = express();
 const server = http.createServer(app);
@@ -82,6 +83,18 @@ function loadConfig() {
     }
     if (data.slack) notifier.configure({ ...data.slack, language: uiLanguage });
     if (data.adminToken) adminToken = data.adminToken;
+    dnsmasqLog.configure({
+      logFile: data.dnsmasq?.logFile || '/var/log/dnsmasq-queries.log',
+      enabled: data.dnsmasq?.enabled !== false,
+      onDnsQuery: ({ clientIp, domain, resolvedIp }) => {
+        if (resolvedIp) {
+          enrichment.getDnsCache().set(resolvedIp, {
+            host: domain,
+            expires: Date.now() + 5 * 60 * 1000,
+          });
+        }
+      },
+    });
     console.log('[config] Loaded:', CONFIG_FILE);
     return data;
   } catch {
@@ -776,6 +789,7 @@ server.listen(PORT, () => {
   yamaha.connectYamaha(() => {
     yamaha.refreshYamahaArp().then(() => pollYamahaConnections());
   });
+  dnsmasqLog.start();
 
   // Periodic snapshot/compaction
   setInterval(() => history.snapshotHistory(), 10 * 60 * 1000);
@@ -803,6 +817,7 @@ function shutdown() {
   console.log('[shutdown] Saving history...');
   try { history.snapshotHistory(); } catch {}
   try { history.closeDb(); } catch {}
+  try { dnsmasqLog.stop(); } catch {}
   process.exit(0);
 }
 process.on('SIGINT',  shutdown);
