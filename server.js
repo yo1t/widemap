@@ -384,7 +384,7 @@ app.post('/api/login', requireAdmin, async (req, res) => {
   if (typeof username === 'string' && username.length > 64) {
     return res.status(400).json({ error: 'ユーザー名が長すぎます' });
   }
-  if (typeof password === 'string' && password.length > 256) {
+  if (typeof password === 'string' && password.length > 256) { // pragma: allowlist secret
     return res.status(400).json({ error: 'パスワードが長すぎます' });
   }
 

@@ -165,7 +165,7 @@ Open the Widemap Settings panel (⚙) and fill in:
 
 **Authentication failed**
 - Verify the username and password with `show login user`
-- Re-enter the password: `login user widemap newpassword` then `save`
+- Re-enter the password: `login user widemap newpassword` then `save` <!-- pragma: allowlist secret -->
 
 **No sessions appearing in Widemap**
 - Confirm the NAT descriptor number matches what `show nat descriptor` returns
