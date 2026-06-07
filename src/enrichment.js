@@ -4,6 +4,15 @@
 const http = require('http');
 const https = require('https');
 const dns = require('dns').promises;
+const Database = require('better-sqlite3');
+const path = require('path');
+
+const DB_PATH = path.join(__dirname, '..', '.widemap.db');
+
+let db            = null;
+let _dbPath       = DB_PATH;
+let stmtUpsertRdap = null;
+let stmtUpsertGeo  = null;
 
 const dnsCache    = new Map(); // ip → {host, expires}
 const DNS_TTL_MS  = 5 * 60 * 1000;
@@ -28,6 +37,75 @@ function recordApiFail(name, err) {
   const s = apiStats[name]; s.fail++; s.lastFailAt = Date.now(); s.lastError  = err?.message || String(err);
 }
 function getApiStats() { return apiStats; }
+
+// ─── SQLite cache persistence ─────────────────────────────────────────────────
+
+function initDb(dbPath) {
+  _dbPath = dbPath || DB_PATH;
+  db = new Database(_dbPath);
+  db.pragma('journal_mode = WAL');
+  db.pragma('busy_timeout = 5000');
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS rdap_cache (
+      ip      TEXT PRIMARY KEY,
+      country TEXT,
+      org     TEXT,
+      expires INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS geo_cache (
+      ip          TEXT PRIMARY KEY,
+      lat         REAL,
+      lon         REAL,
+      city        TEXT,
+      countryCode TEXT,
+      expires     INTEGER NOT NULL
+    );
+  `);
+
+  stmtUpsertRdap = db.prepare(`
+    INSERT INTO rdap_cache (ip, country, org, expires)
+    VALUES (@ip, @country, @org, @expires)
+    ON CONFLICT(ip) DO UPDATE SET country=@country, org=@org, expires=@expires
+  `);
+
+  stmtUpsertGeo = db.prepare(`
+    INSERT INTO geo_cache (ip, lat, lon, city, countryCode, expires)
+    VALUES (@ip, @lat, @lon, @city, @countryCode, @expires)
+    ON CONFLICT(ip) DO UPDATE SET lat=@lat, lon=@lon, city=@city, countryCode=@countryCode, expires=@expires
+  `);
+
+  // Load non-expired entries into memory Maps
+  const now = Date.now();
+  const rdapRows = db.prepare('SELECT * FROM rdap_cache WHERE expires > ?').all(now);
+  for (const row of rdapRows) {
+    rdapCache.set(row.ip, { country: row.country, org: row.org, expires: row.expires });
+  }
+  const geoRows = db.prepare('SELECT * FROM geo_cache WHERE expires > ?').all(now);
+  for (const row of geoRows) {
+    geoCache.set(row.ip, { lat: row.lat, lon: row.lon, city: row.city, countryCode: row.countryCode, expires: row.expires });
+  }
+  console.log(`[enrichment] Cache loaded: ${rdapRows.length} RDAP, ${geoRows.length} geo entries`);
+}
+
+function reopen() {
+  if (db) { try { db.close(); } catch {} db = null; }
+  rdapCache.clear();
+  geoCache.clear();
+  initDb(_dbPath);
+}
+
+function _persistRdap(ip, entry) {
+  if (!stmtUpsertRdap) return;
+  try { stmtUpsertRdap.run({ ip, country: entry.country, org: entry.org, expires: entry.expires }); } catch {}
+}
+
+function _persistGeo(ip, entry) {
+  if (!stmtUpsertGeo) return;
+  try { stmtUpsertGeo.run({ ip, lat: entry.lat ?? null, lon: entry.lon ?? null, city: entry.city ?? null, countryCode: entry.countryCode ?? null, expires: entry.expires }); } catch {}
+}
+
+// ─── HTTP helpers ─────────────────────────────────────────────────────────────
 
 function httpsGetJson(url, redirects = 0) {
   return new Promise((resolve, reject) => {
@@ -67,6 +145,8 @@ function httpPostJson(url, body) {
   });
 }
 
+// ─── Geo lookup ───────────────────────────────────────────────────────────────
+
 async function lookupGeoBatch(ips) {
   const now = Date.now();
   const toFetch = ips.filter(ip => { const c = geoCache.get(ip); return !c || now >= c.expires; });
@@ -81,10 +161,14 @@ async function lookupGeoBatch(ips) {
       let ok = 0;
       results.forEach(r => {
         if (r.status === 'success') {
-          geoCache.set(r.query, { lat: r.lat, lon: r.lon, city: r.city, countryCode: r.countryCode, expires: now + GEO_TTL_MS });
+          const entry = { lat: r.lat, lon: r.lon, city: r.city, countryCode: r.countryCode, expires: now + GEO_TTL_MS };
+          geoCache.set(r.query, entry);
+          _persistGeo(r.query, entry);
           ok++;
         } else {
-          geoCache.set(r.query, { lat: null, lon: null, expires: now + GEO_FAIL_TTL });
+          const entry = { lat: null, lon: null, expires: now + GEO_FAIL_TTL };
+          geoCache.set(r.query, entry);
+          _persistGeo(r.query, entry);
         }
       });
       console.log(`[geo] ${ok}/${chunk.length} IPs geo-resolved`);
@@ -95,11 +179,17 @@ async function lookupGeoBatch(ips) {
       // Rate-limit 対策: エラー時はチャンク内の未キャッシュ IP を 30 分間リトライ抑制
       const rateLimitTtl = 30 * 60 * 1000;
       chunk.forEach(ip => {
-        if (!geoCache.has(ip)) geoCache.set(ip, { lat: null, lon: null, expires: now + rateLimitTtl });
+        if (!geoCache.has(ip)) {
+          const entry = { lat: null, lon: null, expires: now + rateLimitTtl };
+          geoCache.set(ip, entry);
+          _persistGeo(ip, entry);
+        }
       });
     }
   }
 }
+
+// ─── RDAP lookup ──────────────────────────────────────────────────────────────
 
 // NIC handle check: no spaces + only alphanumeric/hyphen/underscore → treat as identifier
 function isNicHandle(s) {
@@ -129,6 +219,7 @@ async function lookupRdap(ip) {
 
     const result = { country, org, expires: now + RDAP_TTL_MS };
     rdapCache.set(ip, result);
+    _persistRdap(ip, result);
     console.log(`[rdap] ${ip} → ${country} / ${org}`);
     recordApiOk('rdap');
     return result;
@@ -136,18 +227,18 @@ async function lookupRdap(ip) {
     recordApiFail('rdap', err);
     const result = { country: null, org: null, expires: now + RDAP_FAIL_TTL };
     rdapCache.set(ip, result);
+    // RDAP の一時エラーは短い TTL のままにする（長期キャッシュしない）
     return result;
   }
 }
 
-// PTR reverse-lookup results that are not useful as display names.
-// These are machine-generated hostnames that convey less info than the raw IP.
+// ─── PTR lookup ───────────────────────────────────────────────────────────────
+
 const PTR_JUNK_RE = /ec2-[\d-]+\.compute(?:-1)?\.amazonaws\.com$|\.compute\.internal$|\.static\.\S+\.fttx\.|ip-\d+-\d+-\d+-\d+\.|ptr\d|\.in-addr\.arpa$/i;
 
 function isPtrJunk(host) {
   if (!host) return true;
   if (PTR_JUNK_RE.test(host)) return true;
-  // Heuristic: hostname that starts with the IP octets reversed (e.g. "192-168-1-1.example.com")
   if (/^\d{1,3}-\d{1,3}-\d{1,3}-\d{1,3}\./.test(host)) return true;
   return false;
 }
@@ -170,11 +261,25 @@ async function reverseDns(ip) {
   }
 }
 
+// ─── Test helper ──────────────────────────────────────────────────────────────
+
+function _initForTest() {
+  if (db) { try { db.close(); } catch {} db = null; }
+  rdapCache.clear();
+  geoCache.clear();
+  dnsCache.clear();
+  initDb(':memory:');
+}
+
+// ─── Exports ──────────────────────────────────────────────────────────────────
+
 function getDnsCache() { return dnsCache; }
 function getRdapCache() { return rdapCache; }
 function getGeoCache() { return geoCache; }
 
 module.exports = {
+  initDb,
+  reopen,
   reverseDns,
   isPtrJunk,
   lookupRdap,
@@ -183,4 +288,5 @@ module.exports = {
   getRdapCache,
   getGeoCache,
   getApiStats,
+  _initForTest,
 };
