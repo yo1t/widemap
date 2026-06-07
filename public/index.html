@@ -1436,6 +1436,7 @@ document.getElementById('yamaha-connect-btn').addEventListener('click', async ()
     updateConnBadge('l3l4');
     if (!doYamaha) {
       allConnections = [];
+      dataRangeFrom = Date.now() - 86400_000;
       if (!asusActive) stopGraph();
       else if (simulation) updateOrgGraph();
     }
@@ -2102,6 +2103,8 @@ function updateHeader(data) {
 let allConnections = [];
 let serverTimeOffset = 0; // diff between client and server clocks (ms)
 let currentTimeFilter = '1h';
+// Oldest timestamp we have loaded in allConnections (Date.now()-24h after initial WS load)
+let dataRangeFrom = Date.now() - 86400_000;
 
 // Period filter: returns [from, to] against lastSeen (null = no limit)
 let customRangeFrom = null; // ms (for custom filter)
@@ -2133,11 +2136,9 @@ function getTimeRange() {
 function getFilteredConnections() {
   const { from, to, minTtl = 0 } = getTimeRange();
   return allConnections.filter(c => {
-    // 'live' means 'currently active' → judge by lastSeen + TTL
-    // Others mean 'connections newly seen during the period' → judge by firstSeen
-    const t = currentTimeFilter === 'live'
-      ? (c.lastSeen  || 0)
-      : (c.firstSeen || c.lastSeen || 0);
+    // All filters judge by lastSeen: "connections active within the period"
+    // live=15min means currently active; 1h means seen in last hour (superset of live), etc.
+    const t = c.lastSeen || c.firstSeen || 0;
     if (from !== null && t < from) return false;
     if (to   !== null && t > to)   return false;
     if (minTtl && (c.ttl || 0) < minTtl) return false;
@@ -2514,12 +2515,12 @@ document.getElementById('threat-save-btn').addEventListener('click', () => {
 document.getElementById('slack-verify-btn').addEventListener('click', async () => {
   const btn = document.getElementById('slack-verify-btn');
   const token = document.getElementById('s-slack-token').value.trim();
-  if (!token) { showStatus('slack-status', 'Token required', false); return; }
+  // If token field is empty, server will use the stored token
   btn.disabled = true;
   try {
     const r = await apiFetch('__BASE__/api/slack/verify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ token: token || undefined }),
     });
     const data = await r.json();
     const info = document.getElementById('slack-workspace-info');
@@ -2542,29 +2543,22 @@ document.getElementById('slack-lookup-btn').addEventListener('click', async () =
   const username = document.getElementById('s-slack-username').value.trim();
   const token = document.getElementById('s-slack-token').value.trim();
   if (!username) { showStatus('slack-status', 'Username required', false); return; }
-  // Use saved token if field is empty
-  let useToken = token;
-  if (!useToken) {
-    // Try to get from server config
-    try {
-      const r = await apiFetch('__BASE__/api/config/slack');
-      const d = await r.json();
-      if (d.config?.tokenSet) useToken = '__SAVED__'; // signal server to use stored token
-    } catch {}
-  }
   btn.disabled = true;
   try {
+    // token omitted → server reads from stored config
     const r = await apiFetch('__BASE__/api/slack/lookup-user', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, token: useToken !== '__SAVED__' ? useToken : undefined }),
+      body: JSON.stringify({ username, token: token || undefined }),
     });
     const data = await r.json();
     const info = document.getElementById('slack-user-info');
     if (data.ok) {
+      const displayName = data.realName || data.displayName || data.name;
       info.style.display = 'block';
       info.style.color = 'var(--green)';
-      info.textContent = `✓ ${data.realName || data.displayName || data.name} (${data.userId})`;
+      info.textContent = `✓ ${displayName} (${data.userId})`;
       document.getElementById('s-slack-userid').value = data.userId;
+      document.getElementById('s-slack-username').value = displayName;
     } else {
       info.style.display = 'block';
       info.style.color = '#ef4444';
@@ -2586,6 +2580,7 @@ document.getElementById('slack-save-btn').addEventListener('click', async () => 
         enabled: document.getElementById('s-slack-enabled').checked,
         token: token || undefined,
         userId: document.getElementById('s-slack-userid').value.trim(),
+        displayName: document.getElementById('s-slack-username').value.trim(),
         cooldownMinutes: parseInt(document.getElementById('s-slack-cooldown').value),
       }),
     });
@@ -2602,8 +2597,13 @@ document.getElementById('slack-test-btn').addEventListener('click', async () => 
   const btn = document.getElementById('slack-test-btn');
   btn.disabled = true; btn.textContent = t('settings.slack.test.sending');
   try {
-    await apiFetch('__BASE__/api/slack/test', { method: 'POST', body: '{}' });
-    showStatus('slack-status', t('settings.slack.test.ok'), true);
+    const r = await apiFetch('__BASE__/api/slack/test', { method: 'POST', body: '{}' });
+    const data = await r.json();
+    if (data.success) {
+      showStatus('slack-status', t('settings.slack.test.ok'), true);
+    } else {
+      showStatus('slack-status', t('settings.slack.test.fail') + (data.error || 'error'), false);
+    }
   } catch (e) {
     showStatus('slack-status', t('settings.slack.test.fail') + e.message, false);
   } finally {
@@ -2617,6 +2617,7 @@ document.getElementById('slack-test-btn').addEventListener('click', async () => 
     if (!data) return;
     document.getElementById('s-slack-enabled').checked = !!data.config?.enabled;
     if (data.config?.userId) document.getElementById('s-slack-userid').value = data.config.userId;
+    if (data.config?.displayName) document.getElementById('s-slack-username').value = data.config.displayName;
     if (data.config?.cooldownMinutes) document.getElementById('s-slack-cooldown').value = String(data.config.cooldownMinutes);
     if (data.config?.tokenSet) {
       document.getElementById('s-slack-token').placeholder = currentLang === 'ja' ? '(保存済み)' : '(saved)';
@@ -2883,7 +2884,16 @@ function updateOrgGraph() {
 
 socket.on('connections-update', data => {
   if (!yamahaConfigured) return; // do nothing while Yamaha is disabled
-  allConnections = data.connections || [];
+  const incoming = data.connections || [];
+  if (data.partial) {
+    // Merge: update/add entries without discarding older ones loaded via API
+    const map = new Map(allConnections.map(c => [`${c.src}|${c.dst}|${c.dport}|${c.proto}`, c]));
+    for (const c of incoming) map.set(`${c.src}|${c.dst}|${c.dport}|${c.proto}`, c);
+    allConnections = [...map.values()];
+  } else {
+    allConnections = incoming;
+    dataRangeFrom = 0;
+  }
   if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
   if (!asusActive) {
     buildGraphFromConnections(); // Yamaha-only: render src IPs as devices
@@ -3233,7 +3243,28 @@ function updateMapDots() {
 }
 
 // ─── Time filter ──────────────────────────────────────────────────────────────
-function applyTimeFilter() {
+async function fetchConnectionRange(from, to) {
+  const params = new URLSearchParams();
+  if (from != null) params.set('from', from);
+  if (to   != null) params.set('to',   to);
+  try {
+    const res = await apiFetch(`__BASE__/api/connections?${params}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    allConnections = data.connections || [];
+    dataRangeFrom = from != null ? from : 0;
+    if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
+  } catch (e) {
+    console.error('[connections] fetch failed:', e);
+  }
+}
+
+async function applyTimeFilter() {
+  const { from, to } = getTimeRange();
+  // If the filter requests older data than what's loaded, fetch from API
+  if (from === null || from < dataRangeFrom) {
+    await fetchConnectionRange(from, to);
+  }
   if (asusActive) updateOrgGraph();
   else            buildGraphFromConnections();
   if (mapMode)    updateMapDots();

@@ -304,9 +304,11 @@ async function pollYamahaConnections() {
 
     history.pruneHistory();
 
+    const pollCutoff = now - 86400_000;
     io.emit('connections-update', {
-      connections: [...connectionHistory.values()],
+      connections: [...connectionHistory.values()].filter(c => c.lastSeen >= pollCutoff),
       serverTime: now,
+      partial: true,
     });
 
     if (autoInvestigate) {
@@ -543,6 +545,15 @@ app.post('/api/notes/draft', requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Connections history API ──────────────────────────────────────────────────
+
+app.get('/api/connections', requireAdmin, (req, res) => {
+  const from = req.query.from != null && req.query.from !== '' ? parseInt(req.query.from) : null;
+  const to   = req.query.to   != null && req.query.to   !== '' ? parseInt(req.query.to)   : null;
+  const connections = history.queryByTimeRange(from, to);
+  res.json({ connections, serverTime: Date.now() });
+});
+
 // ─── Backup / Restore API ─────────────────────────────────────────────────────
 
 app.get('/api/backup/list', requireAdmin, (req, res) => {
@@ -597,28 +608,35 @@ app.post('/api/backup/upload', requireAdmin, (req, res) => {
 });
 
 app.get('/api/config/slack', requireAdmin, (req, res) => {
-  res.json({ config: notifier.getConfig() });
+  const cfg = notifier.getConfig();
+  // Also return displayName from file (not held in notifier module)
+  let displayName = '';
+  try {
+    const fileCfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    displayName = fileCfg.slack?.displayName || '';
+  } catch {}
+  res.json({ config: { ...cfg, displayName } });
 });
 
 app.post('/api/config/slack', requireAdmin, (req, res) => {
-  const { enabled, token, userId, cooldownMinutes } = req.body || {};
+  const { enabled, token, userId, cooldownMinutes, displayName } = req.body || {};
   notifier.configure({
     enabled: typeof enabled === 'boolean' ? enabled : undefined,
     token: typeof token === 'string' && token ? token : undefined,
     userId: typeof userId === 'string' ? userId : undefined,
     cooldownMinutes: typeof cooldownMinutes === 'number' ? cooldownMinutes : undefined,
   });
-  // Persist token directly (getConfig() intentionally omits it, so saveConfig() alone can't capture new tokens)
-  if (typeof token === 'string' && token) {
-    try {
-      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
-      cfg.slack = cfg.slack || {};
-      cfg.slack.token = token;
-      fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 });
-    } catch {}
-  }
+  // Persist sensitive/extra fields directly (getConfig() intentionally omits token)
+  try {
+    const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    cfg.slack = cfg.slack || {};
+    if (typeof token === 'string' && token) cfg.slack.token = token;
+    if (typeof displayName === 'string') cfg.slack.displayName = displayName;
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  } catch {}
   saveConfig();
-  res.json({ success: true, config: notifier.getConfig() });
+  const fileCfg = (() => { try { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); } catch { return {}; } })();
+  res.json({ success: true, config: { ...notifier.getConfig(), displayName: fileCfg.slack?.displayName || '' } });
 });
 
 app.post('/api/slack/test', requireAdmin, async (req, res) => {
@@ -631,7 +649,14 @@ app.post('/api/slack/test', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/slack/verify', requireAdmin, async (req, res) => {
-  const { token } = req.body || {};
+  let { token } = req.body || {};
+  // Fall back to stored token if not provided (token field shows "(保存済み)" but is empty)
+  if (!token) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+      token = cfg.slack?.token || '';
+    } catch {}
+  }
   const result = await notifier.verifyToken(token);
   res.json(result);
 });
@@ -696,9 +721,11 @@ io.on('connection', socket => {
   }
   const connectionHistory = history.getConnectionHistory();
   if (yamaha.isEnabled() && connectionHistory.size) {
+    const connectCutoff = Date.now() - 86400_000;
     socket.emit('connections-update', {
-      connections: [...connectionHistory.values()],
+      connections: [...connectionHistory.values()].filter(c => c.lastSeen >= connectCutoff),
       serverTime: Date.now(),
+      partial: true,
     });
   }
 });
