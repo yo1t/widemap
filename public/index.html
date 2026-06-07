@@ -4229,15 +4229,14 @@ function renderDevicesTable() {
 
 async function loadDevicesView() {
   try {
-    const res = await fetch('__BASE__/api/devices', {
-      headers: { 'X-Admin-Token': localStorage.getItem('adminToken') || '' }
-    });
+    const res = await apiFetch('__BASE__/api/devices');
     if (!res.ok) throw new Error(res.statusText);
     const data = await res.json();
     devicesData = data.devices || [];
     renderDevicesTable();
   } catch (e) {
     console.error('[devices] load failed:', e);
+    document.getElementById('devices-count').textContent = '読み込み失敗: ' + e.message;
   }
 }
 
