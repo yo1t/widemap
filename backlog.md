@@ -139,6 +139,65 @@
 | ✅ P1-6 | 端末一覧ビューを追加 | Widemap は既に端末情報を多く取得しているが、現状はグラフ/通信ログ中心で「LAN内に何がいるか」を一覧で確認しづらい | `GET /api/devices` 追加（NDP IPv6付き）。UI に「🖥 端末一覧」タブ追加。IP/MAC/ベンダー/名前/IPv6/ソース/初回・最終確認。検索・列フィルタ・ソート対応。行クリックで詳細パネル（メモ編集・自動調査）。右サイドバーからの IP フィルタ連動 |
 | ✅ P1-7 | 外部 API 依存の可観測性を改善 | RDAP/Geo/Threat feed の失敗がユーザーから見えにくい | `src/enrichment.js` に `apiStats` 追加。rdap/geo/ptr の ok/fail/lastOkAt/lastFailAt/lastError を `GET /api/status` で公開 |
 
+#### P1-5 `deviceId` / 名寄せの段階実装
+
+IP は DHCP で変わる可能性があり、MAC も Apple のプライベート Wi-Fi アドレス・仮想 NIC・手動変更で変わり得るため、どちらも長期的な主キーにはしない。内部主キーとして `deviceId` を発行し、IP/MAC/hostname/mDNS/ASUS名/vendor/source は「観測値」として蓄積する。初期実装では誤統合を避けるため、強い証拠だけ自動紐付けし、曖昧なものは候補に留める。
+
+| 順序 | タスク | 内容 | 完了条件 |
+|---:|--------|------|----------|
+| 1a | `devices` に `deviceId` カラム追加（段階移行①） | `ALTER TABLE devices ADD COLUMN deviceId TEXT` + `CREATE UNIQUE INDEX`。起動時 backfill で既存 row に `crypto.randomUUID()` を付与 | 全 row に deviceId が入り、再起動後も変わらない。ip PRIMARY KEY はこの段階では維持 |
+| 1b | API / `upsert()` を deviceId 対応に拡張 | `getByDeviceId()` を追加。upsert 時に deviceId を保持・返却する。`GET /api/devices` レスポンスに deviceId を含める | 既存テストが通り、`GET /api/devices` が deviceId を返す。後方互換の表示を維持する |
+| 1c | API / UI を deviceId ベースで動作確認 | 端末詳細・メモ編集・自動調査が deviceId 経由で動くことを確認 | 実機で端末一覧の動作が変わらないことを確認 |
+| 1d | `devices_new` でテーブル作り直し（段階移行④）**※contract phase — 後回し** | `deviceId TEXT PRIMARY KEY`、`ip TEXT`（PRIMARY KEY 廃止）で再作成。**1a〜4 が十分安定してから実施**（devices_new 再作成はリスク最高のため最後）。アプリ側が deviceId を主に使っていれば、物理 PRIMARY KEY が ip のままでも実害は少ない | ip PRIMARY KEY が消え deviceId PRIMARY KEY になる。既存データが全件移行される |
+| 2 | `device_observations` テーブル追加 | `deviceId`, `observedAt`, `source`, `ip`, `mac`, `ipv6`, `hostname`, `mdnsName`, `netbiosName`, `asusName`, `vendor` を保存する。**書き込みポリシー: 属性が変化したときのみ記録（毎 poll は書かない）** | ASUS/DHCPD/NAT/INSPECT/NDP 由来の観測が observations に記録され、端末一覧サマリはそこから更新される |
+| 3 | `devices.upsert()` を `observeDevice()` 中心へ移行 | 既存の upsert 呼び出しは壊さず、内部で観測記録 + サマリ更新に寄せる | 既存テストが通り、新規テストで同一 deviceId に複数 IP/MAC 観測が残ることを確認 |
+| 4 | stable MAC 一致の自動紐付け | `isStableMac()` でグローバルユニーク MAC（bit1=0）のみ自動紐付け。privacy MAC / 仮想 NIC は統合しない | 同じ stable MAC + IP変更は同一 deviceId、privacy MAC は別 deviceId のまま |
+| 5 | hostname / mDNS / vendor / recent IP のスコアリング | mDNS/hostname/vendor/recent IP を補助証拠として score 化。強い一致だけ自動、曖昧な一致は候補にする | score >= 自動閾値のみ統合、score 中間は `device_merge_candidates` へ保存 |
+| 6 | merge candidate API | `device_merge_candidates` を追加し、候補の理由・score・status を保存する | 候補一覧 API、承認/却下 API ができる。誤統合を避けるため候補は自動適用しない |
+| 7 | 手動 merge / split UI | 端末詳細で merge 候補を表示し、ユーザーが統合・分離できるようにする | 端末一覧から手動 merge/split が可能。notes/trust の移行先 deviceId も保たれる |
+| 8 | notes / trust / device detail を `deviceId` 紐付けへ移行 | IP/MACベースのメモを `deviceId` 中心へ移す。既存メモは互換読み込みまたは migration する。`devices.noteKey` カラムの扱いも整理 | IP/MAC が変わってもメモ・信頼状態・調査履歴が同じ端末に残る |
+
+**最初の実装単位（P1-5 初期フェーズ）: 1a〜1c、2〜4 を完了させる。** 1d（contract phase）は 2〜4 が安定した後に実施する。5〜8 はその後。特に Apple 系 private MAC は誤統合しやすいため、最初は自動統合せず merge 候補扱いにする。
+
+**`isStableMac()` 実装:**
+```js
+function isStableMac(mac) {
+  if (!mac || !/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/i.test(mac)) return false; // 形式不正
+  if (mac === 'ff:ff:ff:ff:ff:ff' || mac === '00:00:00:00:00:00') return false; // broadcast / all-zero
+  const first = parseInt(mac.split(':')[0], 16);
+  return (first & 0x02) === 0; // locally administered bit = 0 → globally unique
+}
+```
+
+> **edge case**: `ff:ff:ff:ff:ff:ff`（broadcast）・`00:00:00:00:00:00`（all-zero）・形式不正はすべて `false`（unstable 扱い）にする。
+
+#### P1-5 必要なテスト項目
+
+| Step | テスト内容 |
+|------|-----------|
+| **1a** | 新規デバイスに deviceId が自動付与される |
+| **1a** | 既存 row の backfill 後、全 row に deviceId が存在する |
+| **1a** | deviceId は UNIQUE（同一 IP への再 upsert で deviceId が変わらない） |
+| **1a** | 再起動（reopen）後も deviceId が変わらない（永続性） |
+| **1b** | `getByDeviceId()` で取得できる |
+| **1b** | 同一 IP への upsert が deviceId を上書きしない |
+| **1b** | `GET /api/devices` レスポンスに deviceId が含まれる |
+| **2** | 属性が変化したときのみ observation が追記される |
+| **2** | 同一属性の繰り返し upsert では observation 件数が増えない |
+| **2** | 同一 deviceId に複数 IP/MAC の observation が保持される |
+| **3** | `observeDevice()` が既知 IP に対して既存 deviceId を返す |
+| **3** | 未知 IP に対して新しい deviceId を発行する |
+| **3** | 既存 `upsert()` 呼び出しが後方互換で動く（既存テスト全 PASS） |
+| **4** | `isStableMac('aa:bb:cc:dd:ee:ff')` → true（globally unique） |
+| **4** | `isStableMac('02:00:00:00:00:01')` → false（locally administered） |
+| **4** | `isStableMac('ff:ff:ff:ff:ff:ff')` → false（broadcast） |
+| **4** | `isStableMac('00:00:00:00:00:00')` → false（all-zero） |
+| **4** | `isStableMac('gg:hh:ii:jj:kk:ll')` → false（形式不正） |
+| **4** | `isStableMac(null)` → false（null/undefined 安全） |
+| **4** | 同じ stable MAC + IP 変更 → 同一 deviceId に紐付く |
+| **4** | privacy MAC (unstable) の IP 変更 → 別 deviceId のまま（自動統合しない） |
+| **4** | stable MAC で既存 deviceId がある場合、新観測が自動リンクされる |
+
 ### P2 — 余裕ができたら
 
 | # | 項目 | 理由 | 完了条件 |
