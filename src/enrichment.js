@@ -279,7 +279,9 @@ async function lookupRdap(ip) {
 
   if (inFlightRdap.has(ip)) return inFlightRdap.get(ip);  // 進行中のリクエストに相乗り
 
-  const p = _doLookupRdap(ip, rdapGeneration).finally(() => inFlightRdap.delete(ip));
+  const p = _doLookupRdap(ip, rdapGeneration).finally(() => {
+    if (inFlightRdap.get(ip) === p) inFlightRdap.delete(ip); // 自分自身のときだけ削除
+  });
   inFlightRdap.set(ip, p);
   return p;
 }
