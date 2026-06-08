@@ -19,6 +19,7 @@ const DNS_TTL_MS  = 5 * 60 * 1000;
 
 const rdapCache     = new Map(); // ip → {country, org, expires}
 const inFlightRdap  = new Map(); // ip → Promise  (in-flight dedupe)
+let rdapGeneration  = 0;         // reopen() のたびにインクリメント: 旧 Promise の書き込みを無効化
 const RDAP_TTL_MS   = 24 * 60 * 60 * 1000; // 24h
 const RDAP_FAIL_TTL = 60 * 60 * 1000;       // 60min retry on failure
 
@@ -109,6 +110,8 @@ function initDb(dbPath) {
 }
 
 function reopen() {
+  rdapGeneration++;          // 進行中の _doLookupRdap が書き込みをスキップするようにする
+  inFlightRdap.clear();      // 古い Promise への参照を解放
   if (db) { try { db.close(); } catch {} db = null; }
   rdapCache.clear();
   geoCache.clear();
@@ -229,7 +232,7 @@ function isNicHandle(s) {
 }
 
 // 実際の HTTP フェッチと結果キャッシュ（lookupRdap から呼ばれる）
-async function _doLookupRdap(ip) {
+async function _doLookupRdap(ip, generation = rdapGeneration) {
   const now = Date.now();
   // 二重チェック: 並行呼び出しが先にキャッシュへ書いていた場合の早期リターン
   const cached = rdapCache.get(ip);
@@ -250,16 +253,19 @@ async function _doLookupRdap(ip) {
     if (!org && data.name) org = data.name;
 
     const result = { country, org, expires: now + RDAP_TTL_MS };
-    rdapCache.set(ip, result);
-    _persistRdap(ip, result);
-    console.log(`[rdap] ${ip} → ${country} / ${org}`);
+    // reopen() が挟まった場合はキャッシュ/DB への書き込みをスキップ
+    if (generation === rdapGeneration) {
+      rdapCache.set(ip, result);
+      _persistRdap(ip, result);
+      console.log(`[rdap] ${ip} → ${country} / ${org}`);
+    }
     recordApiOk('rdap');
     return result;
   } catch (err) {
     recordApiFail('rdap', err);
     const result = { country: null, org: null, expires: now + RDAP_FAIL_TTL };
-    rdapCache.set(ip, result);
-    // RDAP の一時エラーは短い TTL のままにする（長期キャッシュしない）
+    // 失敗キャッシュも世代が合う場合のみ書き込む
+    if (generation === rdapGeneration) rdapCache.set(ip, result);
     return result;
   }
 }
@@ -273,7 +279,7 @@ async function lookupRdap(ip) {
 
   if (inFlightRdap.has(ip)) return inFlightRdap.get(ip);  // 進行中のリクエストに相乗り
 
-  const p = _doLookupRdap(ip).finally(() => inFlightRdap.delete(ip));
+  const p = _doLookupRdap(ip, rdapGeneration).finally(() => inFlightRdap.delete(ip));
   inFlightRdap.set(ip, p);
   return p;
 }
@@ -328,6 +334,7 @@ function _initForTest() {
   geoCache.clear();
   dnsCache.clear();
   inFlightRdap.clear();
+  rdapGeneration = 0;
   initDb(':memory:');
 }
 
