@@ -138,6 +138,7 @@
 | ✅ P1-5 | `deviceId` と観測値ベースの名寄せを導入 | IP は DHCP で変わり、MAC もプライバシーMAC/仮想NICで変わるため、どちらも安定した主キーにならない。端末一覧・メモ・信頼状態を長期的に安定させるには内部IDが必要 | **2026-06-09 step 1a〜8 完了**（deviceId + backfill + observations + observeDevice + isStableMac + computeMergeScore + merge candidates API + notes UUID 対応 + 手動 merge/split UI）。step 1d のみ contract phase で保留。 |
 | ✅ P1-6 | 端末一覧ビューを追加 | Widemap は既に端末情報を多く取得しているが、現状はグラフ/通信ログ中心で「LAN内に何がいるか」を一覧で確認しづらい | `GET /api/devices` 追加（NDP IPv6付き）。UI に「🖥 端末一覧」タブ追加。IP/MAC/ベンダー/名前/IPv6/ソース/初回・最終確認。検索・列フィルタ・ソート対応。行クリックで詳細パネル（メモ編集・自動調査）。右サイドバーからの IP フィルタ連動 |
 | ✅ P1-7 | 外部 API 依存の可観測性を改善 | RDAP/Geo/Threat feed の失敗がユーザーから見えにくい | `src/enrichment.js` に `apiStats` 追加。rdap/geo/ptr の ok/fail/lastOkAt/lastFailAt/lastError を `GET /api/status` で公開 |
+| P1-8 | 端末 inventory の active / stale / archive 整理 | 実LAN端末は約69台だが端末一覧は106件あり、過去IP・過去MAC・private MAC・DHCP再割当の残骸が混ざっている可能性が高い。総数と「今いる端末」を分けないと一覧が膨らみ続ける | 端末に `active` / `recent` / `stale` / `archived` 状態を導入。端末一覧は active/recent を主表示し、stale は既定で畳むまたはフィルタ。物理削除ではなく archive を基本にする |
 
 #### P1-5 `deviceId` / 名寄せの段階実装
 
@@ -170,6 +171,31 @@ function isStableMac(mac) {
 ```
 
 > **edge case**: `ff:ff:ff:ff:ff:ff`（broadcast）・`00:00:00:00:00:00`（all-zero）・形式不正はすべて `false`（unstable 扱い）にする。
+
+#### P1-8 端末 inventory cleanup / active-stale 方針
+
+現在、実LAN端末は約69台だが、端末一覧は106件ある。これは deviceId / observations 導入後に見える自然な正規化課題で、古いIP、古いMAC、Apple系 private MAC、DHCP再割当、一時的な観測が別端末として残っている可能性がある。まず削除ではなく、表示と状態管理で「今いる端末」と「過去に見た端末」を分ける。
+
+| 状態 | 初期条件案 | 表示方針 |
+|------|------------|----------|
+| `active` | `lastSeen` が過去24時間以内 | 既定表示。現在LANにいる端末として数える |
+| `recent` | `lastSeen` が7日以内 | 既定表示または簡単に切替可能 |
+| `stale` | `lastSeen` が30日以上前 | 既定では非表示または折りたたみ。merge候補・過去履歴として残す |
+| `archived` | 手動 archive、または90日以上前の候補 | 通常一覧から除外。物理削除はしない |
+
+実装タスク:
+
+| 順序 | タスク | 内容 | 完了条件 |
+|---:|--------|------|----------|
+| 1 | device status 算出 | `lastSeen` から `active` / `recent` / `stale` を算出する。手動 archive 用の状態も持てるようにする | `GET /api/devices` が `status` を返す。既存 deviceId / notes / merge candidates は維持 |
+| 2 | 端末一覧フィルタ | active/recent/stale/archived の表示切替を追加。既定は active + recent | 106件の総数とは別に active 台数が見える。実LAN台数に近い数字で把握できる |
+| 3 | stale 端末の扱い | stale は削除せず、merge候補・過去履歴・メモ参照用に残す | stale を非表示にしても履歴・notes・merge candidate は壊れない |
+| 4 | 手動 archive / unarchive | 端末詳細から archive / unarchive できるようにする | archive 端末は通常一覧から外れ、必要時だけ表示できる |
+| 5 | duplicate cleanup 補助 | 同じ stable MAC、同じ mDNS/hostname、古い lastSeen の端末を優先して merge candidate に出す | 古いIP/MACで分裂した端末を整理しやすくなる |
+
+物理削除は初期実装では行わない。接続履歴や notes との関連を壊さないため、まずは archive と表示フィルタで整理する。
+
+> **⚠️ タスク5 実装時の注意**: P1-5 の `checkMergeCandidates()` は `observeDevice()` が呼ばれたタイミングでのみスコアリングする。stale 端末は最近 `observeDevice()` が呼ばれていないため、自動では merge candidate に上がらない。タスク5 を実装する際は、**起動時または定期バッチで stale 端末を対象にした候補チェック**（`checkMergeCandidates()` を全 stale deviceId に対して一括実行）を別途走らせる処理が必要になる。
 
 #### P1-5 必要なテスト項目
 
