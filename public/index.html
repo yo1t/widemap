@@ -2452,7 +2452,8 @@ function refreshAllNotes() {
     const mac = card.dataset.mac;
     const c = (lastClients || []).find(c => c.mac === mac);
     if (!c) return;
-    const noteText = lookupNote(c.ip, c.mac);
+    const dev = devicesData.find(d => d.mac === mac || d.ip === c.ip);
+    const noteText = lookupNote(c.ip, c.mac, dev?.deviceId);
     const noteEl = card.querySelector('.device-note');
     if (!noteEl) return;
     if (noteText) {
@@ -2465,8 +2466,10 @@ function refreshAllNotes() {
   });
 }
 
-// Look up a note using both IP and MAC (handles DHCP/MAC-randomisation)
-function lookupNote(ip, mac) {
+// Look up a note using deviceId (preferred), IP, or MAC.
+// Pass deviceId when available so UUID-keyed notes (set by POST /api/notes) are found correctly.
+function lookupNote(ip, mac, deviceId) {
+  if (deviceId && notesMap[deviceId] != null) return notesMap[deviceId];
   if (ip && mac && notesMap[`${ip}|${mac}`]) return notesMap[`${ip}|${mac}`];
   // Search entries that match by only one of ip/mac
   for (const k of Object.keys(notesMap)) {
@@ -3033,7 +3036,16 @@ socket.on('yamaha-status', s => {
 });
 
 socket.on('notes-update', data => {
-  if (data?.notes) notesMap = data.notes;
+  if (data?.notes) {
+    notesMap = data.notes;
+    // Sync deviceId-keyed notes back into devicesData so re-opening the
+    // detail panel shows the latest value without requiring a full refresh.
+    for (const dev of devicesData) {
+      if (dev.deviceId != null) {
+        dev.note = data.notes[dev.deviceId] ?? null;
+      }
+    }
+  }
   refreshAllNotes();
 });
 
@@ -4448,17 +4460,24 @@ document.getElementById('dv-detail-save').addEventListener('click', async () => 
   if (!dvDetailDevice) return;
   const note = document.getElementById('dv-detail-note-ta').value;
   const ip = dvDetailDevice.ip, mac = dvDetailDevice.mac || '';
+  const deviceId = dvDetailDevice.deviceId || null;
   try {
     await apiFetch('__BASE__/api/notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip, mac, note }),
     });
-    const key = (ip && mac) ? `${ip}|${mac}` : ip || mac;
+    // Remove stale IP/MAC-keyed entries from local cache
     for (const k of Object.keys(notesMap)) {
       const [kip, kmac] = k.split('|');
       if ((ip && kip === ip) || (mac && (kmac === mac || kip === mac))) delete notesMap[k];
     }
+    // Store under deviceId key when available (mirrors server behaviour)
+    const key = deviceId || ((ip && mac) ? `${ip}|${mac}` : ip || mac);
     if (note.trim()) notesMap[key] = note.trim();
+    else delete notesMap[key];
+    // Update devicesData in-place so re-opening the detail shows the latest note
+    const dev = devicesData.find(d => d.ip === ip);
+    if (dev) dev.note = note.trim() || null;
     refreshAllNotes();
     const btn = document.getElementById('dv-detail-save');
     const orig = btn.textContent;
