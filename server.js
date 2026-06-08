@@ -361,7 +361,17 @@ asus.configure({
   onAuthRequired: (msg)  => io.emit('auth-required', { message: msg }),
   onPollError:    (msg)  => io.emit('poll-error',    { message: msg }),
   onNetworkUpdate: (data) => {
+    // Deduplicate by IP: ASUS sometimes returns multiple entries for the same IP
+    // (e.g. AiMesh node + main router, or 2.4GHz + 5GHz transient overlap).
+    // Keep the entry with the strongest RSSI; this prevents vendor/asusName from
+    // flip-flopping on every poll and causing observation count explosion.
+    const byIp = new Map();
     for (const c of data.clients) {
+      if (!c.ip) continue;
+      const prev = byIp.get(c.ip);
+      if (!prev || (c.rssi || 0) > (prev.rssi || 0)) byIp.set(c.ip, c);
+    }
+    for (const c of byIp.values()) {
       const ipv6 = yamaha.getNdpByMac(c.mac);
       c.ipv6Addrs = ipv6 || null;
       devices.observeDevice({
