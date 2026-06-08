@@ -17,7 +17,8 @@ let stmtUpsertGeo  = null;
 const dnsCache    = new Map(); // ip → {host, expires}
 const DNS_TTL_MS  = 5 * 60 * 1000;
 
-const rdapCache   = new Map(); // ip → {country, org, expires}
+const rdapCache     = new Map(); // ip → {country, org, expires}
+const inFlightRdap  = new Map(); // ip → Promise  (in-flight dedupe)
 const RDAP_TTL_MS   = 24 * 60 * 60 * 1000; // 24h
 const RDAP_FAIL_TTL = 60 * 60 * 1000;       // 60min retry on failure
 
@@ -227,8 +228,10 @@ function isNicHandle(s) {
   return /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(s);
 }
 
-async function lookupRdap(ip) {
+// 実際の HTTP フェッチと結果キャッシュ（lookupRdap から呼ばれる）
+async function _doLookupRdap(ip) {
   const now = Date.now();
+  // 二重チェック: 並行呼び出しが先にキャッシュへ書いていた場合の早期リターン
   const cached = rdapCache.get(ip);
   if (cached && now < cached.expires) return cached;
   try {
@@ -259,6 +262,20 @@ async function lookupRdap(ip) {
     // RDAP の一時エラーは短い TTL のままにする（長期キャッシュしない）
     return result;
   }
+}
+
+// キャッシュチェック → in-flight dedupe → _doLookupRdap
+// どの呼び出し元（Yamaha poll / INSPECT / 調査）からでも同一 IP の並行 fetch を1本に絞る
+async function lookupRdap(ip) {
+  const now = Date.now();
+  const cached = rdapCache.get(ip);
+  if (cached && now < cached.expires) return cached;  // キャッシュヒット: Map を触らず即返す
+
+  if (inFlightRdap.has(ip)) return inFlightRdap.get(ip);  // 進行中のリクエストに相乗り
+
+  const p = _doLookupRdap(ip).finally(() => inFlightRdap.delete(ip));
+  inFlightRdap.set(ip, p);
+  return p;
 }
 
 // ─── Throttled RDAP batch ─────────────────────────────────────────────────────
@@ -310,6 +327,7 @@ function _initForTest() {
   rdapCache.clear();
   geoCache.clear();
   dnsCache.clear();
+  inFlightRdap.clear();
   initDb(':memory:');
 }
 
