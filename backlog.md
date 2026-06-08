@@ -157,7 +157,7 @@ IP は DHCP で変わる可能性があり、MAC も Apple のプライベート
 | ✅ 7 | 手動 merge / split UI | 端末詳細で merge 候補を表示し、ユーザーが統合・分離できるようにする | 端末詳細パネルに「🔀 名寄せ候補」セクションを追加。類似度・理由・相手端末の IP/MAC/名前を表示。「統合」→ POST /api/devices/merge、「却下」→ POST /api/devices/reject。操作後は devices + candidates を自動リロード。2026-06-09 完了 |
 | ✅ 8 | notes / trust / device detail を `deviceId` 紐付けへ移行 | IP/MACベースのメモを `deviceId` 中心へ移す。既存メモは互換読み込みまたは migration する。`devices.noteKey` カラムの扱いも整理 | `notes.isSafeKey()` に UUID 対応。`getForDevice(deviceId, ip, mac)` フォールバック実装。`POST /api/notes` が deviceId を正規キーとして自動解決・マイグレーション。`GET /api/devices` に `note` フィールド。2026-06-09 完了 |
 
-**最初の実装単位（P1-5 初期フェーズ）: 1a〜1c、2〜4 を完了させる。** 1d（contract phase）は 2〜4 が安定した後に実施する。5〜8 はその後。特に Apple 系 private MAC は誤統合しやすいため、最初は自動統合せず merge 候補扱いにする。
+**P1-5 の機能実装は 1a〜8 まで完了。** 1d は optional な contract phase として保留し、`ON CONFLICT(deviceId)` 主軸の upsert、ip nullable / 複数IP保持、ORM・migration tool 導入など、物理スキーマ変更が必要になった時だけ実施する。トリガーが来なければ ip PRIMARY KEY のまま維持してよい。
 
 **`isStableMac()` 実装:**
 ```js
