@@ -12,6 +12,11 @@ const DB_PATH = path.join(__dirname, '..', '.widemap.db');
 const CANDIDATE_SCORE = 0.4;  // save for manual review
 // AUTO_MERGE_SCORE = 0.8 — reserved, not enabled (too risky without user confirmation)
 
+// Minimum interval between observations for the same (deviceId, source).
+// Prevents count explosion when a source emits conflicting data on consecutive polls.
+// Set to 0 in tests to allow back-to-back observations.
+let OBS_MIN_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes
+
 let db        = null;
 let _dbPath   = DB_PATH;
 let stmtUpsert            = null;
@@ -294,6 +299,9 @@ function observeDevice(d) {
 function _hasObservationChanged(deviceId, source, attrs) {
   const last = stmtLastObservation.get(deviceId, source);
   if (!last) return true;
+  // Safety net: suppress writes within the minimum interval even if attrs differ.
+  // This prevents observation explosions when a source emits conflicting data rapidly.
+  if (OBS_MIN_INTERVAL_MS > 0 && (Date.now() - last.observedAt) < OBS_MIN_INTERVAL_MS) return false;
   const keys = ['ip', 'mac', 'ipv6', 'hostname', 'mdnsName', 'netbiosName', 'asusName', 'vendor'];
   return keys.some(k => (attrs[k] || null) !== (last[k] || null));
 }
@@ -507,6 +515,7 @@ function reopen() {
 
 function _initForTest() {
   if (db) { try { db.close(); } catch {} db = null; }
+  OBS_MIN_INTERVAL_MS = 0;   // disable cooldown so back-to-back test observations work
   initDb(':memory:');
 }
 
