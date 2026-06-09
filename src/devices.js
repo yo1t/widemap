@@ -246,13 +246,25 @@ function observeDevice(d) {
   // ── 1. Look up by IP ──────────────────────────────────────────────────────
   let existingDevice = d.ip ? stmtSelectIp.get(d.ip) : null;
 
-  // ── 1a. Archived IP guard ─────────────────────────────────────────────────
-  // If the IP row is archived (merged away), do not re-create a device for it.
-  // Observations from this IP belong to the surviving device (mergedInto) but
-  // for simplicity we silently drop them here; the keepId device still gets
-  // observations via its own current IP on the next poll.
+  // ── 1a. Archived IP guard / mergedInto redirect ──────────────────────────
+  // If the IP row is archived (merged away), redirect the observation to the
+  // surviving device (mergedInto) so its lastSeen and attributes stay current
+  // even when the old IP resurfaces (e.g. DHCP re-assign).
+  // Manual-archive rows (mergedInto = null) are silently dropped as before.
   if (existingDevice && existingDevice.archivedAt != null) {
-    return null;
+    if (existingDevice.mergedInto) {
+      const keepDevice = stmtSelectDeviceId.get(existingDevice.mergedInto);
+      if (keepDevice && keepDevice.archivedAt == null && keepDevice.ip) {
+        // Redirect: treat this observation as if it arrived for the keep device.
+        existingDevice = keepDevice;
+        d = { ...d, ip: keepDevice.ip };
+        // fall through to normal upsert / observation logic
+      } else {
+        return null; // keep is itself archived or has no IP — drop
+      }
+    } else {
+      return null; // no merge target (manual archive) — silently drop
+    }
   }
 
   // ── 2. Stable-MAC auto-link ───────────────────────────────────────────────
@@ -556,6 +568,27 @@ function getByDeviceId(deviceId) {
   return stmtSelectDeviceId.get(deviceId) || null;
 }
 
+// ─── Startup: stale merge-candidate batch ─────────────────────────────────
+
+/**
+ * Run checkMergeCandidates() for every non-archived stale device (lastSeen > 7 days).
+ * Called once at startup so devices that haven't been observed recently still
+ * get their duplicate candidates surfaced for manual review.
+ * @returns {number} number of stale devices scanned
+ */
+function checkStaleMergeCandidates() {
+  if (!db) return 0;
+  const STALE_MS = 7 * 24 * 60 * 60 * 1000;
+  const cutoff = Date.now() - STALE_MS;
+  const staleDevices = db.prepare(
+    'SELECT deviceId FROM devices WHERE archivedAt IS NULL AND lastSeen < ?'
+  ).all(cutoff);
+  for (const { deviceId } of staleDevices) {
+    checkMergeCandidates(deviceId);
+  }
+  return staleDevices.length;
+}
+
 // ─── Populate from existing connection history ─────────────────────────────
 
 function seedFromConnectionHistory(connectionHistory) {
@@ -613,5 +646,6 @@ module.exports = {
   approveMerge,
   rejectCandidate,
   seedFromConnectionHistory,
+  checkStaleMergeCandidates,
   _initForTest,
 };

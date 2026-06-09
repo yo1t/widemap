@@ -4,575 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Widemap</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --bg: #0a0e1a; --panel: #111827; --border: #1f2937;
-    --text: #e2e8f0; --muted: #6b7280; --accent: #3b82f6;
-    --green: #10b981; --yellow: #f59e0b; --red: #ef4444;
-    --purple: #8b5cf6; --cyan: #06b6d4;
-  }
-  body { background: var(--bg); color: var(--text); font-family: 'SF Mono','Fira Code',monospace; font-size: 13px; overflow: hidden; height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
-
-  /* ── Settings overlay ────────────────────────────── */
-  #settings-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 1000; transition: opacity 0.2s;
-  }
-  #settings-overlay.hidden { opacity: 0; pointer-events: none; }
-  .settings-card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
-    width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
-  }
-  .settings-header {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
-  }
-  .settings-title { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: 0.05em; }
-  .settings-close { background: transparent; border: none; color: var(--muted); font-size: 16px; cursor: pointer; padding: 2px 6px; border-radius: 4px; }
-  .settings-close:hover { color: var(--text); }
-  .settings-body { display: flex; flex: 1; overflow: hidden; }
-  /* Tabs (left sidebar) */
-  .settings-tabs {
-    width: 80px; flex-shrink: 0; border-right: 1px solid var(--border);
-    display: flex; flex-direction: column; padding: 12px 0; gap: 4px;
-  }
-  .settings-tab {
-    display: flex; flex-direction: column; align-items: center;
-    padding: 10px 6px; border: none; background: transparent;
-    cursor: pointer; border-radius: 0; gap: 3px;
-    border-left: 3px solid transparent; transition: all 0.15s;
-  }
-  .settings-tab:hover { background: rgba(255,255,255,0.04); }
-  .settings-tab.active { background: rgba(59,130,246,0.08); border-left-color: var(--accent); }
-  .tab-badge {
-    font-size: 11px; font-weight: 700; font-family: 'SF Mono','Fira Code',monospace;
-    color: var(--muted); letter-spacing: 0.02em;
-  }
-  .settings-tab.active .tab-badge { color: var(--accent); }
-  .tab-name { font-size: 9px; color: var(--muted); letter-spacing: 0.06em; }
-  /* Tab content (right) */
-  .settings-panes { flex: 1; overflow-y: auto; padding: 20px 22px; }
-  .settings-pane { display: none; }
-  .settings-pane.active { display: block; }
-  .pane-title {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 12px; font-weight: 600; color: var(--text);
-    margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
-    cursor: pointer; user-select: none;
-  }
-  .pane-title input[type=checkbox] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--accent); flex-shrink: 0; }
-  .section-inputs { transition: opacity 0.2s; }
-  .section-inputs.disabled { opacity: 0.35; pointer-events: none; }
-  .settings-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .form-group { margin-bottom: 12px; }
-  .form-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 5px; display: block; }
-  .form-input {
-    width: 100%; padding: 8px 12px; background: rgba(255,255,255,0.05);
-    border: 1px solid var(--border); border-radius: 6px; color: var(--text);
-    font-family: inherit; font-size: 12px; transition: border-color 0.15s; outline: none;
-  }
-  .form-input:focus { border-color: var(--accent); }
-  .connect-btn {
-    width: 100%; padding: 10px; margin-top: 8px;
-    background: var(--accent); border: none; border-radius: 8px;
-    color: #fff; font-family: inherit; font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: background 0.15s, opacity 0.15s;
-  }
-  .connect-btn:hover { background: #2563eb; }
-  .connect-btn:disabled { opacity: 0.5; cursor: default; }
-  .settings-status {
-    margin-top: 12px; padding: 8px 12px; border-radius: 6px;
-    font-size: 12px; display: none;
-  }
-  .settings-status.ok  { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: var(--green); }
-  .settings-status.err { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.35); color: var(--red); }
-  .spinner {
-    display: inline-block; width: 12px; height: 12px;
-    border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff;
-    border-radius: 50%; animation: spin 0.7s linear infinite; margin-right: 6px; vertical-align: middle;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  /* ── Disconnected banner ─────────────────────────── */
-  #disconnected-banner {
-    display: none; padding: 8px 20px; background: rgba(239,68,68,0.12);
-    border-bottom: 1px solid rgba(239,68,68,0.3); color: var(--red);
-    font-size: 12px; text-align: center; flex-shrink: 0;
-  }
-  #disconnected-banner button {
-    background: transparent; border: 1px solid var(--red); border-radius: 4px;
-    color: var(--red); font-family: inherit; font-size: 11px; padding: 2px 8px;
-    cursor: pointer; margin-left: 8px; transition: background 0.15s;
-  }
-  #disconnected-banner button:hover { background: rgba(239,68,68,0.2); }
-
-  /* ── Header ─────────────────────────────────────── */
-  header { display: flex; align-items: center; gap: 16px; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border); flex-shrink: 0; }
-  header h1 { font-size: 15px; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; }
-  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  .status-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .status-dot.error  { background: var(--red);   box-shadow: 0 0 6px var(--red); }
-  /* ── Time filter ─────────────────────────────────── */
-  .time-filter {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    padding: 3px 4px; background: var(--bg);
-    border: 1px solid var(--border); border-radius: 6px;
-  }
-  .time-filter-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; padding-left: 4px; }
-  .time-filter select {
-    background: transparent; border: none; outline: none;
-    color: var(--text); font-family: inherit; font-size: 11px; cursor: pointer;
-    padding: 3px 4px;
-  }
-  .time-filter select option { background: var(--panel); color: var(--text); }
-  .time-custom-input {
-    background: transparent; border: 1px solid var(--border); border-radius: 4px;
-    color: var(--text); font-family: inherit; font-size: 11px; padding: 2px 4px;
-    color-scheme: dark; outline: none;
-  }
-  .time-custom-input:focus { border-color: var(--accent); }
-  /* ── Connection badges ───────────────────────────── */
-  .conn-badges { display: flex; gap: 6px; align-items: center; }
-  .conn-badge {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px;
-    font-size: 11px; color: var(--muted); background: var(--bg);
-  }
-  .conn-badge .badge-layer { font-family: 'SF Mono','Fira Code',monospace; font-weight: 700; color: var(--muted); font-size: 10px; letter-spacing: 0.02em; }
-  .conn-badge .badge-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
-  .conn-badge .badge-ip { color: var(--text); font-size: 11px; }
-  .conn-badge.on  { border-color: rgba(16,185,129,0.4); background: rgba(16,185,129,0.08); }
-  .conn-badge.on  .badge-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .conn-badge.on  .badge-layer { color: var(--green); }
-  .conn-badge.off { border-color: rgba(107,114,128,0.3); opacity: 0.5; }
-  .conn-badge.err { border-color: rgba(239,68,68,0.4); background: rgba(239,68,68,0.08); }
-  .conn-badge.err .badge-dot { background: var(--red); box-shadow: 0 0 6px var(--red); }
-  .conn-badge.err .badge-layer { color: var(--red); }
-  .header-stats { display: flex; gap: 24px; margin-left: auto; }
-  .stat { display: flex; flex-direction: column; align-items: flex-end; }
-  .stat-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
-  .stat-value { font-size: 13px; font-weight: 600; }
-  /* ── View tabs ───────────────────────────────────── */
-  .view-tabs { display: flex; gap: 2px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; padding: 2px; }
-  .view-tab {
-    padding: 4px 12px; background: transparent; border: none; border-radius: 5px;
-    color: var(--muted); font-family: inherit; font-size: 11px; cursor: pointer;
-    transition: background 0.15s, color 0.15s; white-space: nowrap;
-  }
-  .view-tab.active { background: var(--accent); color: #fff; }
-  .view-tab:not(.active):hover { background: var(--border); color: var(--text); }
-  /* ── Settings button ─────────────────────────────── */
-  .settings-btn {
-    margin-left: 8px; padding: 5px 10px; background: transparent;
-    border: 1px solid var(--border); border-radius: 6px; color: var(--muted);
-    font-family: inherit; font-size: 14px; cursor: pointer; transition: border-color 0.15s, color 0.15s;
-  }
-  .settings-btn:hover { border-color: var(--accent); color: var(--accent); }
-  .settings-btn.alert { border-color: var(--red); color: var(--red); animation: pulse-border 1.5s ease-in-out infinite; }
-  @keyframes pulse-border { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.4); } 50% { box-shadow: 0 0 0 4px rgba(239,68,68,0); } }
-
-  /* ── Main layout ─────────────────────────────────── */
-  .main { display: flex; flex: 1; overflow: hidden; }
-  #graph-container { flex: 1; position: relative; overflow: hidden; }
-  /* ── Zoom controls ────────────────────────────────── */
-  .zoom-controls {
-    position: absolute; right: 10px; bottom: 16px;
-    display: flex; flex-direction: column; align-items: center; gap: 4px;
-    background: rgba(17,24,39,0.92); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px; z-index: 10;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  }
-  .zoom-btn {
-    width: 28px; height: 28px; background: transparent; border: none;
-    color: var(--text); font-family: inherit; font-size: 14px;
-    cursor: pointer; border-radius: 4px;
-    display: flex; align-items: center; justify-content: center;
-    transition: background 0.15s, color 0.15s;
-  }
-  .zoom-btn:hover { background: rgba(59,130,246,0.2); color: var(--accent); }
-  .zoom-slider-wrap {
-    display: flex; flex-direction: column; align-items: center;
-    height: 100px; margin: 4px 0; justify-content: center;
-  }
-  .zoom-slider {
-    appearance: none; -webkit-appearance: none;
-    width: 80px; height: 4px; background: var(--border); border-radius: 2px;
-    outline: none; transform: rotate(-90deg); transform-origin: center;
-  }
-  .zoom-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 12px; height: 12px; background: var(--accent);
-    border-radius: 50%; cursor: pointer; border: 2px solid var(--panel);
-  }
-  .zoom-slider::-moz-range-thumb {
-    width: 12px; height: 12px; background: var(--accent);
-    border-radius: 50%; cursor: pointer; border: 2px solid var(--panel);
-  }
-  .zoom-pct { font-size: 9px; color: var(--muted); font-family: 'SF Mono','Fira Code',monospace; min-width: 28px; text-align: center; }
-  #graph { width: 100%; height: 100%; }
-  #map-container { flex: 1; position: relative; overflow: hidden; background: #0b1629; }
-  /* ── Stats view ──────────────────────────────────── */
-  #stats-container {
-    flex: 1; display: none; flex-direction: column; overflow: hidden;
-    background: var(--bg); padding: 10px; gap: 10px;
-  }
-  .stats-header { font-size: 12px; font-weight: 600; color: var(--text); padding: 4px 8px; }
-  /* Connection Log */
-  #log-container { display: none; flex-direction: column; flex: 1; overflow: hidden; background: var(--bg); padding: 10px; gap: 8px; }
-  .log-header { font-size: 12px; font-weight: 600; color: var(--text); padding: 4px 8px; display: flex; align-items: center; gap: 8px; }
-  .log-title { font-size: 13px; }
-  .log-threat-badge { background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
-  .log-table-wrap { flex: 1; overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
-  .log-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  .log-table th { position: sticky; top: 0; background: var(--bg); border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; font-weight: 600; color: var(--muted); white-space: nowrap; }
-  .log-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-  .log-table tr:hover { background: rgba(59,130,246,0.06); }
-  .log-table tr.threat-row { background: rgba(239,68,68,0.08); }
-  .log-table tr.threat-row:hover { background: rgba(239,68,68,0.14); }
-  .log-threat-icon { color: #ef4444; font-weight: bold; }
-  .log-threat-tag { font-size: 9px; color: #ef4444; max-width: 200px; overflow: hidden; text-overflow: ellipsis; display: inline-block; vertical-align: middle; cursor: default; }
-  .log-badge-danger { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; background: #ef444433; color: #ef4444; border: 1px solid #ef444455; margin-right: 4px; }
-  .log-badge-warn { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; background: #f59e0b33; color: #f59e0b; border: 1px solid #f59e0b55; margin-right: 4px; }
-  .log-threat-low { color: #f59e0b; }
-  .log-table tr.warn-row { background: rgba(245,158,11,0.06); }
-  .log-table tr.warn-row:hover { background: rgba(245,158,11,0.12); }
-  .log-badge-safe { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; background: #22c55e22; color: #4ade80; border: 1px solid #22c55e44; }
-  .log-badge-clickable { cursor: pointer; transition: box-shadow 0.15s, transform 0.1s; }
-  .log-badge-clickable:hover { box-shadow: 0 0 0 2px rgba(255,255,255,0.15); transform: scale(1.05); }
-  .log-filter-active { box-shadow: 0 0 0 2px var(--accent); transform: scale(1.08); }
-  .threat-clickable { cursor: pointer; }
-  .threat-detail-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 2000; display: flex; align-items: center; justify-content: center; }
-  .threat-detail-overlay.hidden { display: none; }
-  .threat-detail-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; width: 520px; max-width: calc(100vw - 20px); max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.6); }
-  .threat-detail-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); font-weight: 700; font-size: 13px; color: #ef4444; }
-  .threat-detail-body { padding: 16px 18px; }
-  .threat-detail-body table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  .threat-detail-body th { text-align: left; padding: 5px 8px; color: var(--muted); font-weight: 600; white-space: nowrap; width: 30%; vertical-align: top; }
-  .threat-detail-body td { padding: 5px 8px; word-break: break-all; }
-  .threat-detail-body tr { border-bottom: 1px solid var(--border); }
-  .threat-detail-body .section-title { font-size: 11px; font-weight: 700; color: var(--accent); margin: 12px 0 6px; padding-top: 8px; border-top: 1px solid var(--border); }
-  .log-sort-icon { cursor: pointer; opacity: 0.4; font-size: 10px; margin-left: 2px; }
-  .log-sort-icon:hover { opacity: 1; }
-  .log-sort-icon.asc::after { content: ' ↑'; }
-  .log-sort-icon.desc::after { content: ' ↓'; }
-  .log-search-icon { cursor: pointer; opacity: 0.4; font-size: 10px; margin-left: 3px; }
-  .log-search-icon:hover { opacity: 1; }
-  .log-search-icon.active { opacity: 1; color: var(--accent); }
-  .log-search-popup { position: absolute; z-index: 1000; }
-  .log-search-popup.hidden { display: none; }
-  .log-search-popup-inner { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); min-width: 220px; }
-  .log-search-popup-title { font-size: 11px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
-  .log-search-popup select, .log-search-popup input[type="text"] { width: 100%; padding: 5px 8px; margin-bottom: 6px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 11px; font-family: inherit; }
-  .log-search-popup input:focus { border-color: var(--accent); outline: none; }
-  .log-date-input { width: 100%; padding: 5px 8px; margin-bottom: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-size: 11px; font-family: inherit; }
-  .log-date-input:focus { border-color: var(--accent); outline: none; }
-  #log-search-date-range { display: flex; flex-direction: column; gap: 2px; }
-  .log-search-popup-actions { display: flex; gap: 4px; }
-  .log-search-popup-actions button { flex: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: transparent; color: var(--text); font-size: 10px; cursor: pointer; }
-  .log-search-popup-actions button:hover { border-color: var(--accent); }
-  #log-search-apply, #dv-search-apply { background: var(--accent); color: #fff; border-color: var(--accent); }
-  /* ── Device detail panel ── */
-  #dv-detail-panel { width: 360px; min-width: 280px; border-left: 1px solid var(--border); background: var(--panel); display: flex; flex-direction: column; overflow: hidden; }
-  #dv-detail-panel.hidden { display: none !important; }
-  .dv-detail-header { padding: 10px 12px 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
-  .dv-detail-title { font-size: 13px; font-weight: 600; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dv-detail-body { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-  .dv-detail-row { display: flex; gap: 6px; font-size: 11px; }
-  .dv-detail-label { color: var(--muted); min-width: 76px; flex-shrink: 0; }
-  .dv-detail-value { color: var(--text); word-break: break-all; }
-  .dv-detail-note-ta { width: 100%; min-height: 160px; background: rgba(255,255,255,0.04); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-size: 11px; font-family: inherit; padding: 6px 8px; resize: vertical; box-sizing: border-box; }
-  .dv-detail-note-ta:focus { border-color: var(--accent); outline: none; }
-  .dv-detail-actions { display: flex; gap: 6px; padding: 0 12px 12px; }
-  .dv-detail-actions button { flex: 1; padding: 5px 8px; font-size: 11px; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--text); cursor: pointer; }
-  .dv-detail-actions button:hover { border-color: var(--accent); color: var(--accent); }
-  .dv-detail-actions .btn-save { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .dv-detail-actions .btn-save:hover { opacity: 0.85; }
-  #dv-detail-filter-badge { margin-left: 8px; }
-  /* ── P1-8: status filter bar ── */
-  .dv-status-bar { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
-  .dv-status-btn { padding: 2px 10px; font-size: 11px; border: 1px solid var(--border); border-radius: 12px; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; transition: border-color .15s, color .15s; }
-  .dv-status-btn:hover { border-color: var(--accent); color: var(--text); }
-  .dv-status-btn.sel { border-color: var(--accent); color: var(--accent); background: rgba(59,130,246,0.08); }
-  .dv-status-count { font-size: 10px; opacity: .7; }
-  /* status dots used in table rows and detail panel */
-  .s-active   { color: #10b981; }
-  .s-recent   { color: #3b82f6; }
-  .s-stale    { color: #f59e0b; }
-  .s-archived { color: var(--muted); }
-  /* row dimming by status */
-  tr.row-stale   td { opacity: .65; }
-  tr.row-archived td { opacity: .45; text-decoration: line-through; }
-  /* ── Merge candidate cards ── */
-  .dv-merge-section { border-top: 1px solid var(--border); padding-top: 8px; margin-top: 2px; display: flex; flex-direction: column; gap: 6px; }
-  .dv-merge-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-  .dv-merge-card { background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 11px; display: flex; flex-direction: column; gap: 3px; }
-  .dv-merge-card-info { color: var(--text); word-break: break-all; }
-  .dv-merge-card-score { color: var(--muted); font-size: 10px; }
-  .dv-merge-card-btns { display: flex; gap: 6px; margin-top: 4px; }
-  .dv-merge-card-btns button { flex: 1; padding: 3px 6px; font-size: 10px; border-radius: 4px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--text); }
-  .dv-merge-card-btns .btn-merge { background: #10b981; color: #fff; border-color: #10b981; }
-  .dv-merge-card-btns .btn-merge:hover { opacity: 0.85; }
-  .dv-merge-card-btns .btn-reject:hover { border-color: #ef4444; color: #ef4444; }
-  /* Threat indicator in conn-panel */
-  .conn-threat { color: #ef4444; font-size: 10px; margin-left: 4px; }
-  .stats-chart {
-    flex: 1; min-height: 180px;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-    padding: 10px 14px; display: flex; flex-direction: column; overflow: hidden;
-  }
-  .stats-chart-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
-  .stats-chart-title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-shrink: 0; }
-  .stats-chart svg { flex: 1; width: 100%; height: 100%; }
-  /* Bar chart: scroll when content is large */
-  #stats-bar { overflow-y: auto; }
-  #stats-bar svg { flex: none; width: 100%; height: auto; }
-  /* Chart mode toggle */
-  .chart-mode-toggle { display: flex; gap: 1px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; padding: 1px; }
-  .chart-mode-btn {
-    padding: 2px 8px; background: transparent; border: none; border-radius: 4px;
-    color: var(--muted); font-family: inherit; font-size: 10px; cursor: pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .chart-mode-btn.active { background: var(--accent); color: #fff; }
-  .chart-mode-btn:not(.active):hover { background: var(--border); color: var(--text); }
-  .stats-axis path, .stats-axis line { stroke: var(--border); }
-  .stats-axis text { fill: var(--muted); font-size: 10px; font-family: inherit; }
-  .stats-line { fill: none; stroke-width: 1.6; }
-  .stats-bar { transition: opacity 0.15s; }
-  .stats-bar:hover { opacity: 0.7; }
-  .stats-legend { display: flex; flex-wrap: wrap; gap: 8px; font-size: 10px; color: var(--muted); margin-top: 4px; }
-  .stats-legend-item { display: flex; align-items: center; gap: 4px; }
-  .stats-legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-  #world-map { width: 100%; height: 100%; }
-  .map-country { fill: #162032; stroke: #253a56; stroke-width: 0.4px; }
-  .map-graticule { fill: none; stroke: #1a2d45; stroke-width: 0.3px; }
-  .map-sphere { fill: #0b1629; }
-  .map-dot { cursor: pointer; transition: r 0.2s; }
-  .map-dot:hover { stroke-width: 2px; }
-  .map-tooltip {
-    position: absolute; pointer-events: none; background: rgba(11,22,41,0.95);
-    border: 1px solid #2d4a6e; border-radius: 8px; padding: 10px 14px;
-    font-size: 12px; line-height: 1.6; max-width: 220px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.6); z-index: 100; display: none;
-  }
-  .map-tooltip-name { font-weight: 700; font-size: 13px; color: #a78bfa; margin-bottom: 4px; }
-  .map-tooltip-row { display: flex; justify-content: space-between; gap: 12px; }
-  .map-tooltip-key { color: var(--muted); } .map-tooltip-val { color: var(--text); font-weight: 600; }
-
-  .graph-tooltip {
-    position: absolute; pointer-events: none; background: rgba(17,24,39,0.95);
-    border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px;
-    font-size: 12px; line-height: 1.6; max-width: 240px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 100; display: none;
-  }
-  .tooltip-name { font-weight: 700; font-size: 13px; color: var(--accent); margin-bottom: 4px; }
-  .tooltip-row { display: flex; justify-content: space-between; gap: 12px; }
-  .tooltip-key { color: var(--muted); } .tooltip-val { color: var(--text); font-weight: 600; }
-
-  /* ── Side panel ──────────────────────────────────── */
-  .side-panel { width: 373px; background: var(--panel); border-left: 1px solid var(--border); display: flex; flex-direction: column; flex-shrink: 0; overflow: hidden; }
-  .panel-header { padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); display: flex; align-items: center; gap: 8px; min-height: 40px; }
-  .panel-header-title { flex: 1; }
-  .device-search { flex: 0 0 auto; display: flex; align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; gap: 5px; transition: border-color 0.15s; width: 130px; }
-  .device-search:focus-within { border-color: var(--accent); }
-  .device-search svg { flex-shrink: 0; opacity: 0.4; }
-  .device-search input { background: transparent; border: none; outline: none; color: var(--text); font-family: inherit; font-size: 11px; width: 100%; text-transform: none; letter-spacing: 0; }
-  .device-search input::placeholder { color: var(--muted); }
-  .device-list { flex: 1; overflow-y: auto; padding: 8px; }
-  .device-list::-webkit-scrollbar { width: 4px; }
-  .device-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-  .device-card { padding: 10px 12px; border-radius: 8px; margin-bottom: 6px; border: 1px solid var(--border); cursor: pointer; transition: border-color 0.15s, background 0.15s; position: relative; }
-  /* Note body: scroll up to 3 lines, read-only (display only) */
-  .device-note {
-    display: block; font-size: 11px; margin-top: 4px;
-    line-height: 1.3em; max-height: 3.9em; overflow-y: auto;
-    color: var(--cyan); background: rgba(6,182,212,0.06);
-    border-left: 2px solid var(--cyan); padding: 4px 6px;
-    border-radius: 0 4px 4px 0;
-    white-space: pre-wrap; word-break: break-word; cursor: default;
-  }
-  .device-note.empty { display: none; }
-  .device-note::-webkit-scrollbar { width: 4px; }
-  .device-note::-webkit-scrollbar-thumb { background: var(--cyan); opacity: 0.4; border-radius: 2px; }
-  /* Edit icon: always visible, triggers edit modal */
-  .device-note-edit {
-    display: inline-block; cursor: pointer; padding: 1px 5px;
-    margin-left: 6px; color: var(--muted); border-radius: 4px;
-    font-size: 11px; transition: background 0.15s, color 0.15s;
-  }
-  .device-note-edit:hover { background: rgba(59,130,246,0.15); color: var(--accent); }
-  #note-overlay.hidden { display: none !important; }
-  .note-modal-card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 20px 22px; width: 460px; max-width: calc(100vw - 20px);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-  }
-  .note-modal-card textarea {
-    width: 100%; min-height: 100px; background: rgba(255,255,255,0.04);
-    border: 1px solid var(--border); border-radius: 6px;
-    color: var(--text); font-family: inherit; font-size: 12px; padding: 8px 10px;
-    outline: none; resize: vertical;
-  }
-  .note-modal-card textarea:focus { border-color: var(--accent); }
-  .note-modal-actions { display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }
-  .note-modal-actions button {
-    padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px;
-    background: transparent; color: var(--text); font-family: inherit; font-size: 12px;
-    cursor: pointer; transition: background 0.15s, border-color 0.15s;
-  }
-  .note-modal-actions button:hover { border-color: var(--accent); }
-  .note-modal-actions .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-  .note-modal-actions .btn-primary:hover { background: #2563eb; }
-  .note-modal-actions .btn-investigate { color: var(--cyan); border-color: var(--cyan); }
-  .note-modal-header { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
-  .note-modal-sub { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
-  .device-card:hover, .device-card.selected { border-color: var(--accent); background: rgba(59,130,246,0.08); }
-  .device-card.wired   { border-left: 3px solid #ef4444; }
-  .device-card.wifi-2g { border-left: 3px solid var(--green); }
-  .device-card.wifi-5g { border-left: 3px solid var(--purple); }
-  .device-card.wifi-6g { border-left: 3px solid #eab308; }
-  .node-badge { display: inline-block; font-size: 9px; padding: 1px 5px; border-radius: 3px; margin-left: 6px; vertical-align: middle; font-weight: 600; }
-  .new-badge { display: inline-block; font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: #0d4f2a; color: #3fb950; border: 1px solid #3fb95044; text-transform: uppercase; letter-spacing: 0.05em; margin-left: 4px; vertical-align: middle; }
-  .proto-badges { display: none; }
-  .proto-badge { display: inline-block; font-size: 8px; padding: 1px 4px; border-radius: 3px; font-weight: 700; letter-spacing: 0.3px; vertical-align: middle; margin-right: 2px; }
-  .proto-v4 { background: #22c55e33; color: #22c55e; border: 1px solid #22c55e55; }
-  .proto-v6-green { background: #22c55e33; color: #22c55e; border: 1px solid #22c55e55; }
-  .proto-v6-grey { background: #6b728033; color: #9ca3af; border: 1px solid #6b728055; }
-  .filter-tabs { display: flex; gap: 4px; padding: 8px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
-  .tab-btn { padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: inherit; font-size: 10px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
-  .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .tab-btn:hover:not(.active) { border-color: var(--accent); color: var(--text); }
-  /* Line 1: IP / MAC (title) */
-  .device-title {
-    font-weight: 600; font-size: 12px;
-    font-family: 'SF Mono','Fira Code',monospace;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    color: var(--text);
-  }
-  /* Line 2: device name (if present and different from IP) */
-  .device-name {
-    font-size: 11px; color: var(--accent); margin-top: 1px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .device-name.empty { display: none; }
-  /* Line 3: vendor (OUI) · connection type */
-  .device-meta {
-    font-size: 10px; color: var(--muted); margin-top: 1px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .device-meta.empty { display: none; }
-  /* Line 4: name resolution (DNS / mDNS) */
-  .device-resolved {
-    font-size: 10px; color: var(--green); margin-top: 1px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    opacity: 0.85;
-  }
-  .device-resolved.empty { display: none; }
-  .device-traffic { display: flex; gap: 8px; margin-top: 6px; }
-  .traffic-pill { display: flex; align-items: center; gap: 4px; font-size: 10px; padding: 1px 6px; border-radius: 4px; }
-  .traffic-pill.rx { background: rgba(16,185,129,0.15); color: var(--green); }
-  .traffic-pill.tx { background: rgba(239,68,68,0.15); color: var(--red); }
-  .traffic-bar { height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; margin-top: 2px; }
-  .traffic-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
-  .traffic-bar-fill.rx { background: var(--green); }
-  .traffic-bar-fill.tx { background: var(--red); }
-  .conn-panel { border-top: 1px solid var(--border); flex-shrink: 0; max-height: 240px; display: flex; flex-direction: column; }
-  .conn-panel-header { padding: 8px 16px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-  .conn-list { overflow-y: auto; flex: 1; }
-  .conn-list::-webkit-scrollbar { width: 4px; }
-  .conn-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-  .conn-row { padding: 5px 12px; border-bottom: 1px solid rgba(31,41,55,0.5); font-size: 11px; display: flex; align-items: flex-start; gap: 6px; }
-  .conn-proto { font-size: 9px; padding: 1px 4px; border-radius: 3px; background: rgba(59,130,246,0.2); color: var(--accent); font-weight: 700; flex-shrink: 0; margin-top: 2px; }
-  .conn-host { flex: 1; color: var(--text); min-width: 0; }
-  .conn-hostname { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .conn-rdap { display: block; font-size: 10px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 1px; }
-  .conn-port { color: var(--muted); font-size: 10px; flex-shrink: 0; margin-top: 2px; }
-  .conn-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 11px; }
-  .wan-panel { padding: 12px 16px; border-top: 1px solid var(--border); }
-  .wan-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 8px; }
-  .wan-bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--muted); margin-bottom: 2px; }
-  .legend { position: absolute; bottom: 16px; left: 16px; display: flex; flex-direction: column; gap: 6px; background: rgba(17,24,39,0.85); padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); }
-  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
-  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-  .last-update { position: absolute; top: 10px; right: 10px; font-size: 10px; color: var(--muted); }
-  #error-banner { display: none; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: var(--red); padding: 8px 16px; font-size: 12px; text-align: center; flex-shrink: 0; }
-  #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-  .toast { background: #161b22; border: 1px solid #3fb95066; color: #e6edf3; padding: 10px 16px; border-radius: 8px; font-size: 0.85rem; box-shadow: 0 4px 16px rgba(0,0,0,0.4); opacity: 0; transform: translateY(8px); transition: opacity 0.2s, transform 0.2s; pointer-events: none; max-width: 320px; }
-  .toast.show { opacity: 1; transform: translateY(0); }
-
-  /* ── Mobile layout (≤768px) ─────────────────────── */
-  @media (max-width: 768px) {
-    /* Mobile: scroll the whole page (body), not just .main.
-       Header is position:sticky and stays at the top. */
-    body { overflow-y: auto; overflow-x: hidden; height: auto; min-height: 100dvh; }
-    .main { flex-direction: column; overflow: visible; }
-    /* Graph/Map/Stats use fixed heights (only the active one is shown via display) */
-    #graph-container, #map-container, #stats-container { flex: 0 0 auto; height: 38vh; min-height: 220px; }
-    /* In stats mode, give the chart area a bit more room */
-    body.is-stats-mode #stats-container { height: 55vh; }
-    /* Mobile: shrink chart padding, compact legend */
-    .stats-chart { padding: 6px 8px; }
-    .stats-chart-title { font-size: 9px; }
-    .chart-mode-btn { padding: 2px 5px; font-size: 9px; }
-    .stats-legend { font-size: 9px; gap: 4px; }
-    .stats-axis text { font-size: 9px; }
-    /* Device list + connections panel: fill remaining space, no bottom gap */
-    .side-panel {
-      width: 100% !important;
-      flex: 1 1 auto;
-      min-height: 45vh;
-      max-height: none;
-      border-left: none;
-      border-top: 1px solid var(--border);
-    }
-    /* Make device list and connections panel the same height (50%/50%);
-       device list uses the full area when connections panel is hidden */
-    .device-list { flex: 1 1 0; min-height: 0; }
-    .conn-panel  { flex: 1 1 0; max-height: none !important; min-height: 0; }
-    /* Header: pin to top, allow wrapping, keep compact */
-    header {
-      position: sticky; top: 0; z-index: 20;
-      flex-wrap: wrap; gap: 6px; padding: 6px 8px;
-    }
-    header h1 { font-size: 13px; }
-    .header-stats { display: none; }
-    .conn-badges { gap: 3px; }
-    .conn-badge { padding: 2px 5px; }
-    .conn-badge .badge-layer { font-size: 8px; }
-    .conn-badge .badge-dot { width: 5px; height: 5px; }
-    .conn-badge .badge-ip { font-size: 9px; }
-    .view-tabs { padding: 1px; }
-    .view-tab { padding: 3px 7px; font-size: 10px; }
-    .time-filter { padding: 1px 3px; gap: 4px; }
-    .time-filter-label { display: none; }
-    .time-filter select { font-size: 10px; padding: 2px; }
-    .time-custom-input { font-size: 9px; padding: 1px 2px; max-width: 110px; }
-    .settings-btn { padding: 3px 6px; font-size: 12px; }
-    /* Hide legend (gets in the way on small screens) */
-    .legend { display: none; }
-    .last-update { font-size: 9px; top: 4px; right: 6px; }
-    /* Smaller device cards */
-    .device-card { padding: 6px 10px; }
-    /* Make the settings modal fit the screen width */
-    .settings-card { width: calc(100vw - 20px); max-width: 460px; }
-    .settings-tabs { width: 64px; }
-    .tab-name { font-size: 8px; }
-    /* Smaller device search box */
-    .device-search { width: 100px; }
-  }
-  /* Even narrower screens (small phones in portrait) */
-  @media (max-width: 480px) {
-    /* Hide the brand text — status dot + view tabs are enough identification */
-    header h1 { display: none; }
-    /* Connection badges hidden to free up horizontal space */
-    .conn-badges { display: none; }
-    /* Even more compact tabs */
-    .view-tab { padding: 2px 5px; font-size: 9px; }
-    .panel-header { font-size: 10px; }
-  }
-</style>
+<link rel="stylesheet" href="__BASE__/style.css">
 </head>
 <body>
 
@@ -1230,276 +662,10 @@
 <script src="__BASE__/socket.io/socket.io.js"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<script src="__BASE__/js/i18n.js"></script>
 <script>
+const _BASE = window.BASE_URL || '';
 // ─── Utilities ────────────────────────────────────────────────────────────────
-// ─── i18n ─────────────────────────────────────────────────────────────────────
-let currentLang = 'ja';
-const I18N = {
-  ja: {
-    // Header / Tabs
-    'tab.graph': '📊 グラフマップ', 'tab.map': '🗺 地図', 'tab.stats': '📈 統計情報', 'tab.log': '📋 通信ログ', 'tab.devices': '🖥 端末一覧',
-    'devices.title': '🖥 端末一覧', 'devices.refresh': '更新',
-    'devices.col.ip': 'IP', 'devices.col.mac': 'MAC', 'devices.col.vendor': 'ベンダー', 'devices.col.name': '名前',
-    'devices.col.ipv6': 'IPv6', 'devices.col.sources': 'ソース', 'devices.col.firstSeen': '初回確認', 'devices.col.lastSeen': '最終確認',
-    'period': '期間', 'devices': '接続デバイス', 'wan.rx': 'WAN ↓', 'wan.tx': 'WAN ↑',
-    'settings.title': '⚙ 設定',
-    'period.live': 'リアルタイム (15分以内)', 'period.1h':'1時間以内', 'period.3h':'3時間以内',
-    'period.6h':'6時間以内', 'period.12h':'12時間以内', 'period.24h':'24時間以内',
-    'period.today':'本日', 'period.yesterday':'昨日', 'period.7d':'1週間以内',
-    'period.all':'全期間', 'period.custom':'期間指定…',
-    // Side panel
-    'panel.devices':'接続デバイス一覧', 'panel.search.placeholder':'名前・IPで検索',
-    'panel.conn':'インターネット通信先', 'panel.conn.session':'セッション', 'panel.conn.empty':'アクティブな通信なし',
-    'panel.tab.all':'全て',
-    // WAN section
-    'wan.title':'WAN トラフィック',
-    // Disconnect banner
-    'banner.disconnected':'セッションが切れています。', 'banner.button':'⚙ 設定から再接続',
-    'banner.yamaha':'⚙ Yamaha接続を再確認',
-    // Settings tabs/sections
-    'settings.tab.l3l4':'ルーター', 'settings.tab.l2':'WiFi AP', 'settings.tab.general':'General',
-    'settings.section.l3l4':'Yamaha RTX (SSH)', 'settings.section.l2':'ASUS WiFi AP',
-    'settings.section.general':'一般設定',
-    'settings.tab.threat':'脅威検出', 'settings.section.threat':'🛡️ 脅威検出設定',
-    'settings.tab.backup':'バックアップ', 'settings.section.backup':'💾 バックアップ・リストア',
-    'settings.tab.datasource':'データソース', 'settings.section.datasource':'📡 データソース設定',
-    'settings.datasource.logfile':'ログファイルパス',
-    'settings.backup.interval':'バックアップ頻度', 'settings.backup.generations':'保持世代数',
-    'settings.backup.6h':'6時間ごと', 'settings.backup.12h':'12時間ごと', 'settings.backup.24h':'24時間ごと（毎日）', 'settings.backup.1w':'1週間ごと',
-    'settings.backup.gen3':'3世代', 'settings.backup.gen5':'5世代', 'settings.backup.gen7':'7世代', 'settings.backup.gen10':'10世代', 'settings.backup.gen14':'14世代',
-    'settings.backup.list':'バックアップ一覧', 'settings.backup.create':'今すぐバックアップ',
-    'settings.backup.upload':'ファイルからリストア',
-    'settings.threat.desc':'外部の脅威インテリジェンスフィードからマルウェアC2/配布元IPリストをダウンロードし、NAT セッションと突合します。',
-    'settings.threat.feeds':'取得するフィード', 'settings.threat.interval':'更新頻度',
-    'settings.slack.section':'🔔 Slack通知',
-    'settings.slack.desc':'脅威検出時に Slack DM で通知します。',
-    'settings.slack.enable':'Slack通知を有効化',
-    'settings.slack.token':'Bot Token',
-    'settings.slack.verify':'接続確認',
-    'settings.slack.username':'通知先ユーザー名',
-    'settings.slack.lookup':'検索',
-    'settings.slack.cooldown':'同一宛先の再通知間隔',
-    'settings.slack.cooldown.15m':'15分', 'settings.slack.cooldown.30m':'30分',
-    'settings.slack.cooldown.1h':'1時間', 'settings.slack.cooldown.3h':'3時間', 'settings.slack.cooldown.6h':'6時間',
-    'settings.slack.create':'🔗 Slack Appを作成する',
-    'settings.slack.test':'テスト送信', 'settings.slack.test.sending':'送信中…',
-    'settings.slack.test.ok':'✓ テスト送信しました', 'settings.slack.test.fail':'送信失敗: ',
-    'device.new':'NEW', 'device.new.toast':'🆕 新規デバイスを検出しました',
-    'settings.threat.30m':'30分ごと', 'settings.threat.1h':'1時間ごと', 'settings.threat.3h':'3時間ごと',
-    'settings.threat.6h':'6時間ごと', 'settings.threat.12h':'12時間ごと', 'settings.threat.24h':'24時間ごと',
-    'threat.detail.title':'🚨 脅威検出 詳細',
-    'threat.confidence.low':'Low — 正規サービス上のマルウェア配布報告',
-    'threat.confidence.high':'High — 既知の悪意あるホスト',
-    'threat.tag.low':'URLhaus: {domain} 上でマルウェア配布が報告されています（要パス確認）',
-    'threat.section.feed':'脅威フィード情報', 'threat.section.conn':'通信情報',
-    'threat.section.geo':'地理・組織情報', 'threat.section.time':'時間', 'threat.section.note':'メモ・調査',
-    'threat.label.feed':'フィード', 'threat.label.tag':'脅威タグ', 'threat.label.confidence':'信頼度',
-    'threat.label.matchType':'マッチ種別', 'threat.label.matchValue':'マッチ値', 'threat.label.url':'元URL',
-    'threat.label.srcIp':'送信元 IP', 'threat.label.srcName':'送信元名', 'threat.label.srcMac':'送信元 MAC',
-    'threat.label.srcVendor':'送信元ベンダー', 'threat.label.dstIp':'宛先 IP', 'threat.label.dstHost':'宛先ホスト',
-    'threat.label.dstPort':'宛先ポート', 'threat.label.country':'国', 'threat.label.city':'都市',
-    'threat.label.org':'組織', 'threat.label.firstSeen':'初回検出', 'threat.label.lastSeen':'最終通信',
-    'threat.guidance.high':'🚨 この宛先は脅威インテリジェンスフィードに登録された既知の悪意あるホストです。\n\n推奨アクション:\n1. この端末でアクセスした覚えのない通信であれば、マルウェア感染の可能性があります\n2. 該当端末のウイルススキャンを実施してください\n3. 必要に応じてルーターでこの IP をブロックしてください\n4. 通信が継続している場合は、端末をネットワークから隔離することを推奨します',
-    'threat.guidance.low':'⚠️ この宛先ドメインは正規のサービス（GitHub, Dropbox 等）ですが、このドメイン上の特定の URL がマルウェア配布元として脅威フィードに報告されています。\n\n上記「元URL」が報告されたマルウェア配布パスです。\n\n【重要】本ツールは NAT セッション（IP/ポート）のみ記録しているため、端末が実際にこの URL にアクセスしたかは判別できません。同じドメインへの正常なアクセス（別のリポジトリ、別のファイル等）も同様に表示されます。\n\n推奨アクション:\n1. 送信元の端末でブラウザ履歴・ダウンロード履歴を確認し、上記「元URL」へのアクセス記録があるか調査してください\n2. アクセス記録がある場合 → 即座にウイルススキャンを実施してください\n3. この端末が通常このドメインにアクセスする理由がない場合は、マルウェアによる自動通信の可能性があります\n4. アクセス記録が見つからない場合でも、悪意のあるマルウェアは履歴を削除することがあるため、端末の挙動に不審な点がないか確認してください\n5. 問題なしと判断できたら、メモに「確認済み: 正常な利用」と記録してください',
-    'settings.field.ip':'IP アドレス', 'settings.field.user':'ユーザー名', 'settings.field.pass':'パスワード',
-    'settings.field.nat':'NAT ディスクリプタ番号',
-    'settings.pass.saved':'（保存済み — 変更する場合のみ入力）', 'settings.pass.empty':'パスワード',
-    'settings.btn.connect':'接続', 'settings.btn.disable':'無効化を反映',
-    'settings.btn.connecting':'接続中…', 'settings.btn.disabling':'反映中…',
-    'settings.btn.save':'保存', 'settings.btn.saving':'保存中…',
-    'settings.status.ok':'接続しました ✓', 'settings.status.disabled':'無効化しました ✓',
-    'settings.status.saved':'保存しました ✓',
-    'settings.general.country':'ネットワーク機器の設置場所（国）',
-    'settings.general.note':'世界地図上でアークの起点となる場所です。<br>日本以外を選択した場合、グリニッジを中心とした標準的な世界地図になります。',
-    'settings.general.lang':'言語 (Language)',
-    'settings.general.auto':'不明ノードを自動調査',
-    'settings.general.auto.note':'メモが未記入のノードに対してバックグラウンドで ARP / mDNS / ポート調査を行い、メモを自動生成します（既存メモは上書きしません / 24時間以内に調査済みの IP は再調査しません）。',
-    'settings.general.retention':'ログ保存期間',
-    'settings.retention.7d':'7日', 'settings.retention.30d':'30日', 'settings.retention.90d':'90日',
-    'settings.retention.6m':'6ヶ月', 'settings.retention.1y':'1年', 'settings.retention.2y':'2年',
-    // Conn badge
-    'badge.unused':'未使用', 'badge.ready':'接続中', 'badge.timeout':'セッション切れ',
-    'badge.error':'失敗', 'badge.waiting':'接続中…',
-    // Stats
-    'stats.title.timeline':'通信先別セッション数（時間推移）',
-    'stats.title.bar':'通信先別セッション数（合計）',
-    'stats.legend.other':'その他', 'stats.mode.stack':'📈 積み上げ', 'stats.mode.line':'📊 線',
-    'stats.empty.line1':'表示するデータがありません',
-    'stats.empty.line2':'期間や選択デバイスを変更してみてください',
-    'stats.subtitle.device':'デバイス', 'stats.subtitle.all':'全デバイス', 'stats.subtitle.period':'期間',
-    // Tooltips
-    'tt.ip':'IP', 'tt.mac':'MAC', 'tt.papNode':'接続先', 'tt.type':'接続種別',
-    'tt.rx':'↓ 受信', 'tt.tx':'↑ 送信', 'tt.rssi':'RSSI',
-    'tt.role':'役割', 'tt.role.main':'メインルーター', 'tt.role.mesh':'AiMesh ノード',
-    'tt.country':'国', 'tt.sessions':'セッション数', 'tt.devices':'接続元デバイス',
-    'tt.internet':'インターネット (WAN)',
-    'maptt.place':'場所', 'maptt.session':'セッション', 'maptt.src':'接続元', 'maptt.devices':'台',
-    'maptt.state':'状態', 'maptt.state.active':'● アクティブ', 'maptt.state.idle':'● アイドル',
-    'maptt.state.timeout':'● タイムアウト間近', 'maptt.ttl.remain':'残',
-    // Settings validation
-    'err.asusCred':'ASUSルーターのユーザー名とパスワードを入力してください',
-    'err.atLeastOne':'少なくとも1つのルーターを有効にしてください',
-    'err.userRequired':'ユーザー名を入力してください', 'err.passRequired':'パスワードを入力してください',
-    'err.tokenInvalid':'トークンが正しくありません',
-    'err.serverGeneric':'サーバーエラー: ', 'err.tokenWrong':'トークンが拒否されました。再入力してください。',
-    'err.wsAuth':'WebSocket認証エラー。トークンを再入力してください。',
-    'prompt.token':'管理トークンを入力してください\n（サーバー初回起動時のログに表示されています）',
-    'alert.tokenRequired':'トークンが必要です',
-    'last-update.prefix':'最終更新: ',
-    'legend.wired':'有線 (LAN)', 'legend.wifi24':'Wi-Fi 2.4GHz', 'legend.wifi5':'Wi-Fi 5GHz', 'legend.wifi6':'Wi-Fi 6GHz',
-    'legend.mainrouter':'メインルーター', 'legend.aimesh':'AiMesh ノード', 'legend.internet':'インターネット',
-    // Type labels
-    'type.wired':'有線', 'type.wifi24':'Wi-Fi 2.4GHz', 'type.wifi5':'Wi-Fi 5GHz', 'type.wifi6':'Wi-Fi 6GHz', 'type.unknown':'不明',
-    'note.title':'メモ', 'note.hint':'このノードが何かを記録できます。「🔍 自動調査」で IP からドラフトを生成します。',
-    'note.placeholder':'例: リビングのSwitchBot ハブ', 'note.investigate':'🔍 自動調査',
-    'note.investigating':'🔍 調査中…', 'note.cancel':'キャンセル', 'note.save':'保存',
-    'note.investigate.fail':'調査に失敗しました', 'note.edit.tip':'メモを編集',
-    // Connection Log
-    'log.title':'📋 通信ログ', 'log.sessions':'セッション',
-    'log.threat.detected':'脅威検出',
-    'log.col.threat':'脅威', 'log.col.src':'送信元', 'log.col.threatTag':'脅威詳細',
-    'log.col.dst':'宛先', 'log.col.dport':'ポート', 'log.col.proto':'Proto',
-    'log.col.country':'国', 'log.col.org':'組織', 'log.col.lastSeen':'最終通信',
-    'log.filter.title':'フィルター',
-    'log.filter.contains':'含む', 'log.filter.startsWith':'で始まる',
-    'log.filter.endsWith':'で終わる', 'log.filter.regex':'正規表現',
-    'log.filter.placeholder':'検索条件...',
-    'log.filter.apply':'適用', 'log.filter.clear':'クリア', 'log.filter.close':'閉じる',
-    'log.filter.from':'開始', 'log.filter.to':'終了',
-    'log.badge.safe':'未検出', 'log.badge.danger':'検出', 'log.badge.warn':'要確認',
-  },  en: {
-    'tab.graph': '📊 Graph Map', 'tab.map': '🗺 World Map', 'tab.stats': '📈 Statistics', 'tab.log': '📋 Conn Log', 'tab.devices': '🖥 Devices',
-    'devices.title': '🖥 Devices', 'devices.refresh': 'Refresh',
-    'devices.col.ip': 'IP', 'devices.col.mac': 'MAC', 'devices.col.vendor': 'Vendor', 'devices.col.name': 'Name',
-    'devices.col.ipv6': 'IPv6', 'devices.col.sources': 'Sources', 'devices.col.firstSeen': 'First Seen', 'devices.col.lastSeen': 'Last Seen',
-    'period': 'Period', 'devices': 'Devices', 'wan.rx': 'WAN ↓', 'wan.tx': 'WAN ↑',
-    'settings.title': '⚙ Settings',
-    'period.live': 'Live (last 15 min)', 'period.1h':'Last hour', 'period.3h':'Last 3 hours',
-    'period.6h':'Last 6 hours', 'period.12h':'Last 12 hours', 'period.24h':'Last 24 hours',
-    'period.today':'Today', 'period.yesterday':'Yesterday', 'period.7d':'Last week',
-    'period.all':'All time', 'period.custom':'Custom range…',
-    'panel.devices':'Connected Devices', 'panel.search.placeholder':'Search name or IP',
-    'panel.conn':'Internet Destinations', 'panel.conn.session':'sessions', 'panel.conn.empty':'No active traffic',
-    'panel.tab.all':'All',
-    'wan.title':'WAN Traffic',
-    'banner.disconnected':'Session has expired.', 'banner.button':'⚙ Reconnect via Settings',
-    'banner.yamaha':'⚙ Re-check Yamaha connection',
-    'settings.tab.l3l4':'Router', 'settings.tab.l2':'WiFi AP', 'settings.tab.general':'General',
-    'settings.section.l3l4':'Yamaha RTX (SSH)', 'settings.section.l2':'ASUS WiFi AP',
-    'settings.section.general':'General Settings',
-    'settings.tab.threat':'Threat Intel', 'settings.section.threat':'🛡️ Threat Detection Settings',
-    'settings.tab.backup':'Backup', 'settings.section.backup':'💾 Backup & Restore',
-    'settings.tab.datasource':'Data Sources', 'settings.section.datasource':'📡 Data Sources',
-    'settings.datasource.logfile':'Log File Path',
-    'settings.backup.interval':'Backup frequency', 'settings.backup.generations':'Generations to keep',
-    'settings.backup.6h':'Every 6 hours', 'settings.backup.12h':'Every 12 hours', 'settings.backup.24h':'Every 24 hours (daily)', 'settings.backup.1w':'Every week',
-    'settings.backup.gen3':'3 generations', 'settings.backup.gen5':'5 generations', 'settings.backup.gen7':'7 generations', 'settings.backup.gen10':'10 generations', 'settings.backup.gen14':'14 generations',
-    'settings.backup.list':'Backup list', 'settings.backup.create':'Backup now',
-    'settings.backup.upload':'Restore from file',
-    'settings.threat.desc':'Download malware C2/distribution IP lists from external threat intelligence feeds and match against NAT sessions.',
-    'settings.threat.feeds':'Feeds to fetch', 'settings.threat.interval':'Update frequency',
-    'settings.slack.section':'🔔 Slack Notifications',
-    'settings.slack.desc':'Receive a Slack DM when a threat is detected.',
-    'settings.slack.enable':'Enable Slack notifications',
-    'settings.slack.token':'Bot Token',
-    'settings.slack.verify':'Verify',
-    'settings.slack.username':'Notify username',
-    'settings.slack.lookup':'Search',
-    'settings.slack.cooldown':'Re-notify interval (same destination)',
-    'settings.slack.cooldown.15m':'15 min', 'settings.slack.cooldown.30m':'30 min',
-    'settings.slack.cooldown.1h':'1 hour', 'settings.slack.cooldown.3h':'3 hours', 'settings.slack.cooldown.6h':'6 hours',
-    'settings.slack.create':'🔗 Create a Slack App',
-    'settings.slack.test':'Send test', 'settings.slack.test.sending':'Sending…',
-    'settings.slack.test.ok':'✓ Test message sent', 'settings.slack.test.fail':'Send failed: ',
-    'device.new':'NEW', 'device.new.toast':'🆕 New device detected',
-    'settings.threat.30m':'Every 30 min', 'settings.threat.1h':'Every hour', 'settings.threat.3h':'Every 3 hours',
-    'settings.threat.6h':'Every 6 hours', 'settings.threat.12h':'Every 12 hours', 'settings.threat.24h':'Every 24 hours',
-    'threat.detail.title':'🚨 Threat Detection Detail',
-    'threat.confidence.low':'Low — Malware reported on legitimate service',
-    'threat.confidence.high':'High — Known malicious host',
-    'threat.tag.low':'URLhaus: Malware distribution reported on {domain} (check URL path)',
-    'threat.section.feed':'Threat Feed Info', 'threat.section.conn':'Connection Info',
-    'threat.section.geo':'Geolocation / Organization', 'threat.section.time':'Timing', 'threat.section.note':'Note / Investigation',
-    'threat.label.feed':'Feed', 'threat.label.tag':'Threat Tag', 'threat.label.confidence':'Confidence',
-    'threat.label.matchType':'Match Type', 'threat.label.matchValue':'Match Value', 'threat.label.url':'Original URL',
-    'threat.label.srcIp':'Source IP', 'threat.label.srcName':'Source Name', 'threat.label.srcMac':'Source MAC',
-    'threat.label.srcVendor':'Source Vendor', 'threat.label.dstIp':'Destination IP', 'threat.label.dstHost':'Destination Host',
-    'threat.label.dstPort':'Destination Port', 'threat.label.country':'Country', 'threat.label.city':'City',
-    'threat.label.org':'Organization', 'threat.label.firstSeen':'First Seen', 'threat.label.lastSeen':'Last Seen',
-    'threat.guidance.high':'🚨 This destination is a known malicious host registered in threat intelligence feeds.\n\nRecommended actions:\n1. If you do not recognise this connection, the device may be infected with malware\n2. Run a virus scan on the affected device\n3. Consider blocking this IP on your router\n4. If connections persist, isolate the device from the network',
-    'threat.guidance.low':'⚠️ This destination domain is a legitimate service (GitHub, Dropbox, etc.), but a specific URL on this domain has been reported as distributing malware.\n\nThe "Original URL" above is the reported malware distribution path.\n\n[Important] This tool only records NAT sessions (IP/port), so it cannot determine whether your device actually accessed this specific URL. Normal usage of the same domain (different repositories, files, etc.) will also appear here.\n\nRecommended actions:\n1. Check the source device\'s browser/download history for access to the "Original URL"\n2. If access is found → immediately run a virus scan on the device\n3. If this device has no reason to access this domain, it may indicate automated malware activity\n4. Even if no history is found, be aware that sophisticated malware may delete access logs — check the device for any suspicious behaviour\n5. Once confirmed safe, record "Confirmed: normal usage" in the note below',
-    'settings.field.ip':'IP Address', 'settings.field.user':'Username', 'settings.field.pass':'Password',
-    'settings.field.nat':'NAT Descriptor Number',
-    'settings.pass.saved':'(Saved — leave blank to keep)', 'settings.pass.empty':'Password',
-    'settings.btn.connect':'Connect', 'settings.btn.disable':'Apply (Disable)',
-    'settings.btn.connecting':'Connecting…', 'settings.btn.disabling':'Applying…',
-    'settings.btn.save':'Save', 'settings.btn.saving':'Saving…',
-    'settings.status.ok':'Connected ✓', 'settings.status.disabled':'Disabled ✓',
-    'settings.status.saved':'Saved ✓',
-    'settings.general.country':'Network equipment location (country)',
-    'settings.general.note':'Sets the arc origin on the world map.<br>If a country other than Japan is selected, a standard world map centered on Greenwich is used.',
-    'settings.general.lang':'Language (言語)',
-    'settings.general.auto':'Auto-investigate unknown nodes',
-    'settings.general.auto.note':'For nodes without a saved note, run ARP / mDNS / port scan in the background and auto-generate notes (existing notes are not overwritten / each IP is re-scanned at most once per 24h).',
-    'settings.general.retention':'Log retention period',
-    'settings.retention.7d':'7 days', 'settings.retention.30d':'30 days', 'settings.retention.90d':'90 days',
-    'settings.retention.6m':'6 months', 'settings.retention.1y':'1 year', 'settings.retention.2y':'2 years',
-    'badge.unused':'Unused', 'badge.ready':'Connected', 'badge.timeout':'Session expired',
-    'badge.error':'Failed', 'badge.waiting':'Connecting…',
-    'stats.title.timeline':'Sessions per destination (over time)',
-    'stats.title.bar':'Sessions per destination (total)',
-    'stats.legend.other':'Other', 'stats.mode.stack':'📈 Stacked', 'stats.mode.line':'📊 Line',
-    'stats.empty.line1':'No data to display',
-    'stats.empty.line2':'Try a different period or selected device',
-    'stats.subtitle.device':'Device', 'stats.subtitle.all':'All devices', 'stats.subtitle.period':'Period',
-    'tt.ip':'IP', 'tt.mac':'MAC', 'tt.papNode':'Connected via', 'tt.type':'Connection',
-    'tt.rx':'↓ RX', 'tt.tx':'↑ TX', 'tt.rssi':'RSSI',
-    'tt.role':'Role', 'tt.role.main':'Main Router', 'tt.role.mesh':'AiMesh Node',
-    'tt.country':'Country', 'tt.sessions':'Sessions', 'tt.devices':'Source devices',
-    'tt.internet':'Internet (WAN)',
-    'maptt.place':'Location', 'maptt.session':'Sessions', 'maptt.src':'Source', 'maptt.devices':'devices',
-    'maptt.state':'State', 'maptt.state.active':'● Active', 'maptt.state.idle':'● Idle',
-    'maptt.state.timeout':'● Timing out', 'maptt.ttl.remain':'TTL',
-    'err.asusCred':'Enter ASUS router username and password',
-    'err.atLeastOne':'Enable at least one router',
-    'err.userRequired':'Enter a username', 'err.passRequired':'Enter a password',
-    'err.tokenInvalid':'Invalid token',
-    'err.serverGeneric':'Server error: ', 'err.tokenWrong':'Token rejected. Please enter again.',
-    'err.wsAuth':'WebSocket authentication error. Please re-enter the token.',
-    'prompt.token':'Enter the admin token\n(shown in the server log on first startup)',
-    'alert.tokenRequired':'A token is required',
-    'last-update.prefix':'Last update: ',
-    'legend.wired':'Wired (LAN)', 'legend.wifi24':'Wi-Fi 2.4GHz', 'legend.wifi5':'Wi-Fi 5GHz', 'legend.wifi6':'Wi-Fi 6GHz',
-    'legend.mainrouter':'Main router', 'legend.aimesh':'AiMesh node', 'legend.internet':'Internet',
-    'type.wired':'Wired', 'type.wifi24':'Wi-Fi 2.4GHz', 'type.wifi5':'Wi-Fi 5GHz', 'type.wifi6':'Wi-Fi 6GHz', 'type.unknown':'Unknown',
-    'note.title':'Note', 'note.hint':'Record what this node is. Use "🔍 Investigate" to draft from IP.',
-    'note.placeholder':'e.g. Living room SwitchBot hub', 'note.investigate':'🔍 Investigate',
-    'note.investigating':'🔍 Investigating…', 'note.cancel':'Cancel', 'note.save':'Save',
-    'note.investigate.fail':'Investigation failed', 'note.edit.tip':'Edit note',
-    // Connection Log
-    'log.title':'📋 Connection Log', 'log.sessions':'sessions',
-    'log.threat.detected':'threats detected',
-    'log.col.threat':'Threat', 'log.col.src':'Source', 'log.col.threatTag':'Threat Detail',
-    'log.col.dst':'Destination', 'log.col.dport':'Port', 'log.col.proto':'Proto',
-    'log.col.country':'Country', 'log.col.org':'Organization', 'log.col.lastSeen':'Last Seen',
-    'log.filter.title':'Filter',
-    'log.filter.contains':'Contains', 'log.filter.startsWith':'Starts with',
-    'log.filter.endsWith':'Ends with', 'log.filter.regex':'Regex',
-    'log.filter.placeholder':'Search...',
-    'log.filter.apply':'Apply', 'log.filter.clear':'Clear', 'log.filter.close':'Close',
-    'log.filter.from':'From', 'log.filter.to':'To',
-    'log.badge.safe':'Clear', 'log.badge.danger':'Detected', 'log.badge.warn':'Review',
-  },
-};
-function t(key) { return (I18N[currentLang] && I18N[currentLang][key]) || I18N.ja[key] || key; }
-
-function applyI18n() {
-  document.documentElement.lang = currentLang;
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-html]').forEach(el => { el.innerHTML = t(el.dataset.i18nHtml); });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-  document.querySelectorAll('[data-i18n-title]').forEach(el => { el.title = t(el.dataset.i18nTitle); });
-}
 
 // HTML escape (XSS mitigation: ASUS/Yamaha/DNS/RDAP-derived strings are untrusted)
 function esc(s) {
@@ -1589,7 +755,7 @@ async function connectRouter(body, statusId, btnId, checkboxId) {
   btn.innerHTML = '<span class="spinner"></span>' + (enabled ? t('settings.btn.connecting') : t('settings.btn.disabling'));
   document.getElementById(statusId).style.display = 'none';
   try {
-    const res = await apiFetch('__BASE__/api/login', {
+    const res = await apiFetch(_BASE+'/api/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -2413,7 +1579,7 @@ async function promptAdminToken(reason = '') {
     const tok = prompt((reason ? reason + '\n\n' : '') + t('prompt.token'));
     if (tok === null) { alert(t('alert.tokenRequired')); continue; }
     try {
-      const r = await fetch('__BASE__/api/admin/verify', {
+      const r = await fetch(_BASE+'/api/admin/verify', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: tok }),
       });
@@ -2449,7 +1615,7 @@ async function apiFetch(url, opts = {}) {
   return res;
 }
 
-const socket = io({ path: '__BASE__/socket.io/', auth: { token: adminToken } });
+const socket = io({ path: _BASE+'/socket.io/', auth: { token: adminToken } });
 socket.on('connect_error', err => {
   if (String(err.message).toLowerCase().includes('unauth')) {
     localStorage.removeItem(TOKEN_KEY);
@@ -2528,7 +1694,7 @@ document.getElementById('note-save').addEventListener('click', async () => {
   if (!noteEditIp && !noteEditMac) return;
   const note = document.getElementById('note-textarea').value;
   try {
-    await apiFetch('__BASE__/api/notes', {
+    await apiFetch(_BASE+'/api/notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip: noteEditIp, mac: noteEditMac, note }),
     });
@@ -2559,7 +1725,7 @@ document.getElementById('note-investigate-btn').addEventListener('click', async 
   btn.disabled = true;
   btn.textContent = t('note.investigating');
   try {
-    const r = await apiFetch('__BASE__/api/notes/draft', {
+    const r = await apiFetch(_BASE+'/api/notes/draft', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip: noteEditIp }),
     });
@@ -2702,7 +1868,7 @@ document.getElementById('general-save-btn').addEventListener('click', async () =
   }
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>' + t('settings.btn.saving');
   try {
-    const res = await apiFetch('__BASE__/api/config/general', {
+    const res = await apiFetch(_BASE+'/api/config/general', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ homeCountry: newCountry, language: newLang, autoInvestigate: newAuto, retentionDays: newRetention }),
     });
@@ -2751,7 +1917,7 @@ document.getElementById('slack-verify-btn').addEventListener('click', async () =
   // If token field is empty, server will use the stored token
   btn.disabled = true;
   try {
-    const r = await apiFetch('__BASE__/api/slack/verify', {
+    const r = await apiFetch(_BASE+'/api/slack/verify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: token || undefined }),
     });
@@ -2779,7 +1945,7 @@ document.getElementById('slack-lookup-btn').addEventListener('click', async () =
   btn.disabled = true;
   try {
     // token omitted → server reads from stored config
-    const r = await apiFetch('__BASE__/api/slack/lookup-user', {
+    const r = await apiFetch(_BASE+'/api/slack/lookup-user', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, token: token || undefined }),
     });
@@ -2807,7 +1973,7 @@ document.getElementById('slack-save-btn').addEventListener('click', async () => 
   btn.disabled = true; btn.textContent = t('settings.btn.saving');
   try {
     const token = document.getElementById('s-slack-token').value.trim();
-    await apiFetch('__BASE__/api/config/slack', {
+    await apiFetch(_BASE+'/api/config/slack', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         enabled: document.getElementById('s-slack-enabled').checked,
@@ -2830,7 +1996,7 @@ document.getElementById('slack-test-btn').addEventListener('click', async () => 
   const btn = document.getElementById('slack-test-btn');
   btn.disabled = true; btn.textContent = t('settings.slack.test.sending');
   try {
-    const r = await apiFetch('__BASE__/api/slack/test', { method: 'POST', body: '{}' });
+    const r = await apiFetch(_BASE+'/api/slack/test', { method: 'POST', body: '{}' });
     const data = await r.json();
     if (data.success) {
       showStatus('slack-status', t('settings.slack.test.ok'), true);
@@ -2845,7 +2011,7 @@ document.getElementById('slack-test-btn').addEventListener('click', async () => 
 });
 
 (function loadSlackSettings() {
-  apiFetch('__BASE__/api/config/slack').then(async r => {
+  apiFetch(_BASE+'/api/config/slack').then(async r => {
     const data = await r.json();
     if (!data) return;
     document.getElementById('s-slack-enabled').checked = !!data.config?.enabled;
@@ -2877,7 +2043,7 @@ document.getElementById('slack-test-btn').addEventListener('click', async () => 
 // ─── Backup settings UI ───────────────────────────────────────────────────────
 async function loadBackupList() {
   try {
-    const r = await apiFetch('__BASE__/api/backup/list');
+    const r = await apiFetch(_BASE+'/api/backup/list');
     const data = await r.json();
     const listEl = document.getElementById('backup-list');
     if (data.config) {
@@ -2904,7 +2070,7 @@ async function loadBackupList() {
 
 document.getElementById('backup-config-save').addEventListener('click', async () => {
   try {
-    await apiFetch('__BASE__/api/backup/config', {
+    await apiFetch(_BASE+'/api/backup/config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         intervalHours: parseInt(document.getElementById('s-backup-interval').value),
@@ -2949,7 +2115,7 @@ document.getElementById('datasource-save-btn').addEventListener('click', async (
                  || '/var/log/yamaha-router.log',
       },
     };
-    const r = await apiFetch('__BASE__/api/config/datasources', {
+    const r = await apiFetch(_BASE+'/api/config/datasources', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -2968,7 +2134,7 @@ document.getElementById('datasource-save-btn').addEventListener('click', async (
 
 document.getElementById('backup-create-btn').addEventListener('click', async () => {
   try {
-    const r = await apiFetch('__BASE__/api/backup/create', { method: 'POST' });
+    const r = await apiFetch(_BASE+'/api/backup/create', { method: 'POST' });
     const data = await r.json();
     showStatus('backup-action-status', data.success ? '✓ ' + data.name : 'Failed', data.success);
     loadBackupList();
@@ -2978,7 +2144,7 @@ document.getElementById('backup-create-btn').addEventListener('click', async () 
 });
 
 function backupDownload(name) {
-  window.open('__BASE__/api/backup/download/' + encodeURIComponent(name));
+  window.open(_BASE+'/api/backup/download/' + encodeURIComponent(name));
 }
 
 async function backupRestore(name) {
@@ -2987,7 +2153,7 @@ async function backupRestore(name) {
     : `Restore from "${name}"?\nCurrent data will be overwritten (a safety backup is created first).\n\nContinue?`;
   if (!confirm(msg)) return;
   try {
-    const r = await apiFetch('__BASE__/api/backup/restore', {
+    const r = await apiFetch(_BASE+'/api/backup/restore', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     });
@@ -3008,7 +2174,7 @@ if (backupUploadInput) backupUploadInput.addEventListener('change', async (e) =>
   if (!confirm(msg)) { e.target.value = ''; return; }
   try {
     const buf = await file.arrayBuffer();
-    const r = await apiFetch('__BASE__/api/backup/upload', {
+    const r = await apiFetch(_BASE+'/api/backup/upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: buf,
@@ -3539,7 +2705,7 @@ async function fetchConnectionRange(from, to) {
   if (from != null) params.set('from', from);
   if (to   != null) params.set('to',   to);
   try {
-    const res = await apiFetch(`__BASE__/api/connections?${params}`);
+    const res = await apiFetch(`${_BASE}/api/connections?${params}`);
     if (!res.ok) return;
     const data = await res.json();
     allConnections = data.connections || [];
@@ -4229,7 +3395,7 @@ async function threatDetailInvestigate(ip) {
   const statusEl = document.getElementById('threat-detail-status');
   statusEl.textContent = t('note.investigating');
   try {
-    const r = await apiFetch('__BASE__/api/notes/draft', {
+    const r = await apiFetch(_BASE+'/api/notes/draft', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip }),
     });
@@ -4247,7 +3413,7 @@ async function threatDetailSaveNote(ip, mac) {
   const ta = document.getElementById('threat-detail-note');
   const statusEl = document.getElementById('threat-detail-status');
   try {
-    await apiFetch('__BASE__/api/notes', {
+    await apiFetch(_BASE+'/api/notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip, mac: mac || undefined, note: ta.value }),
     });
@@ -4424,7 +3590,7 @@ function renderDevicesTable() {
 // ── Merge candidates ─────────────────────────────────────────────────────────
 async function loadMergeCandidates() {
   try {
-    const res = await apiFetch('__BASE__/api/devices/merge-candidates?status=pending');
+    const res = await apiFetch(_BASE+'/api/devices/merge-candidates?status=pending');
     if (!res.ok) return;
     const data = await res.json();
     mergeCandidatesCache = data.candidates || [];
@@ -4523,7 +3689,7 @@ document.getElementById('dv-detail-save').addEventListener('click', async () => 
   const ip = dvDetailDevice.ip, mac = dvDetailDevice.mac || '';
   const deviceId = dvDetailDevice.deviceId || null;
   try {
-    await apiFetch('__BASE__/api/notes', {
+    await apiFetch(_BASE+'/api/notes', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip, mac, note }),
     });
@@ -4558,7 +3724,7 @@ document.getElementById('dv-detail-investigate').addEventListener('click', async
   const resultEl = document.getElementById('dv-investigate-result');
   if (resultEl) resultEl.textContent = '';
   try {
-    const r = await apiFetch('__BASE__/api/notes/draft', {
+    const r = await apiFetch(_BASE+'/api/notes/draft', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ip }),
     });
@@ -4588,13 +3754,13 @@ document.getElementById('dv-detail-body').addEventListener('click', async (e) =>
   btn.disabled = true;
   try {
     if (action === 'merge') {
-      const res = await apiFetch('__BASE__/api/devices/merge', {
+      const res = await apiFetch(_BASE+'/api/devices/merge', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ keepId: dvDetailDevice.deviceId, dropId: otherId }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || res.statusText); }
     } else if (action === 'reject') {
-      const res = await apiFetch('__BASE__/api/devices/reject', {
+      const res = await apiFetch(_BASE+'/api/devices/reject', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: candidateId }),
       });
@@ -4615,7 +3781,7 @@ document.getElementById('dv-detail-archive').addEventListener('click', async () 
   const endpoint = isArchived ? 'unarchive' : 'archive';
   btn.disabled = true;
   try {
-    const res = await apiFetch(`__BASE__/api/devices/${endpoint}`, {
+    const res = await apiFetch(`${_BASE}/api/devices/${endpoint}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deviceId: dvDetailDevice.deviceId }),
     });
@@ -4729,7 +3895,7 @@ async function loadDevicesView() {
     // Always fetch with includeArchived=1 so status filter works client-side without re-fetching
     const [, res] = await Promise.all([
       loadMergeCandidates(),
-      apiFetch('__BASE__/api/devices?includeArchived=1'),
+      apiFetch(_BASE+'/api/devices?includeArchived=1'),
     ]);
     if (!res.ok) throw new Error(res.statusText);
     const data = await res.json();

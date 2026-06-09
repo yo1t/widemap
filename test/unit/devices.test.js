@@ -593,3 +593,83 @@ describe('devices: P1-8 — status and archive', () => {
     assert.equal(devicesModule.archiveDevice(id), false, '二重アーカイブは false');
   });
 });
+
+// ─── P2-12: checkStaleMergeCandidates ────────────────────────────────────────
+
+describe('devices: P2-12 — checkStaleMergeCandidates', () => {
+  beforeEach(() => devicesModule._initForTest());
+
+  it('stale デバイスの merge 候補が checkStaleMergeCandidates で生成される', () => {
+    const STALE = Date.now() - 8 * 24 * 60 * 60 * 1000; // 8日前
+    // upsert() で直接挿入（observeDevice の checkMergeCandidates をバイパス）
+    devicesModule.upsert({ ip: '10.10.0.1', mdnsName: 'stale-host.local', lastSeen: STALE, firstSeen: STALE, source: 'nat' });
+    devicesModule.upsert({ ip: '10.10.0.2', mdnsName: 'stale-host.local', lastSeen: STALE, firstSeen: STALE, source: 'nat' });
+
+    assert.equal(devicesModule.getMergeCandidates('pending').length, 0, '候補はまだない');
+
+    const count = devicesModule.checkStaleMergeCandidates();
+    assert.equal(count, 2, 'stale 端末 2台がスキャンされる');
+
+    const candidates = devicesModule.getMergeCandidates('pending');
+    assert.ok(candidates.length > 0, 'merge 候補が生成される');
+  });
+
+  it('active/recent デバイスは対象外', () => {
+    // active デバイス（lastSeen = 1時間前）
+    devicesModule.upsert({ ip: '10.10.1.1', mdnsName: 'active-host.local', lastSeen: Date.now() - 3600_000, firstSeen: Date.now(), source: 'nat' });
+    devicesModule.upsert({ ip: '10.10.1.2', mdnsName: 'active-host.local', lastSeen: Date.now() - 3600_000, firstSeen: Date.now(), source: 'nat' });
+
+    const count = devicesModule.checkStaleMergeCandidates();
+    assert.equal(count, 0, 'active 端末はスキャン対象外');
+  });
+
+  it('stale デバイスが 0 台の場合 0 を返す', () => {
+    assert.equal(devicesModule.checkStaleMergeCandidates(), 0);
+  });
+});
+
+// ─── P2-11: archived IP の mergedInto redirect ────────────────────────────────
+
+describe('devices: P2-11 — observeDevice redirect via mergedInto', () => {
+  beforeEach(() => devicesModule._initForTest());
+
+  it('archived IP (mergedInto あり) への observeDevice → keepDevice.deviceId を返す', () => {
+    const keepId = devicesModule.observeDevice({ ip: '10.9.0.1', mdnsName: 'keep.local', source: 'nat' });
+    const dropId = devicesModule.observeDevice({ ip: '10.9.0.2', mdnsName: 'drop.local', source: 'nat' });
+    devicesModule.approveMerge(keepId, dropId);
+
+    // drop の IP への再観測 → keep にリダイレクト
+    const result = devicesModule.observeDevice({ ip: '10.9.0.2', source: 'nat' });
+    assert.equal(result, keepId, 'keepDevice.deviceId が返る');
+  });
+
+  it('archived IP への observeDevice → keepDevice の lastSeen が更新される', () => {
+    const keepId = devicesModule.observeDevice({ ip: '10.9.1.1', source: 'nat' });
+    const dropId = devicesModule.observeDevice({ ip: '10.9.1.2', source: 'nat' });
+    devicesModule.approveMerge(keepId, dropId);
+
+    const later = Date.now() + 5000;
+    devicesModule.observeDevice({ ip: '10.9.1.2', lastSeen: later, source: 'nat' });
+
+    const afterLastSeen = devicesModule.getByDeviceId(keepId).lastSeen;
+    assert.ok(afterLastSeen >= later, 'keepDevice の lastSeen が更新される');
+  });
+
+  it('手動アーカイブ済み IP (mergedInto なし) への observeDevice → null', () => {
+    const id = devicesModule.observeDevice({ ip: '10.9.2.1', source: 'nat' });
+    devicesModule.archiveDevice(id);
+
+    const result = devicesModule.observeDevice({ ip: '10.9.2.1', source: 'nat' });
+    assert.equal(result, null, '手動アーカイブ済み IP への observeDevice は null');
+  });
+
+  it('mergedInto 先も archived の場合 → null（チェーンガード）', () => {
+    const keepId = devicesModule.observeDevice({ ip: '10.9.3.1', source: 'nat' });
+    const dropId = devicesModule.observeDevice({ ip: '10.9.3.2', source: 'nat' });
+    devicesModule.approveMerge(keepId, dropId);
+    devicesModule.archiveDevice(keepId); // keep も手動アーカイブ
+
+    const result = devicesModule.observeDevice({ ip: '10.9.3.2', source: 'nat' });
+    assert.equal(result, null, 'keep もアーカイブ済みなら null');
+  });
+});
