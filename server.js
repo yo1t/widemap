@@ -253,7 +253,11 @@ async function pollYamahaConnections() {
 
 app.get(['/', '/index.html'], (req, res) => {
   const html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
-  res.type('html').send(html.replace(/__BASE__/g, htmlEscape(SUBPATH)));
+  const baseScript = `<script>window.BASE_URL = '${htmlEscape(SUBPATH)}';</script>`;
+  res.type('html').send(
+    html.replace('</head>', baseScript + '\n</head>')
+        .replace(/__BASE__/g, htmlEscape(SUBPATH))
+  );
 });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json({ limit: '64kb' }));
@@ -412,6 +416,10 @@ server.listen(PORT, () => {
   runtime.setKnownMacs(history.getKnownMacs());
   devices.initDb();
   devices.seedFromConnectionHistory(history.getConnectionHistory());
+  const staleChecked = devices.checkStaleMergeCandidates();
+  if (staleChecked > 0) {
+    console.log(`[devices] stale merge check: ${staleChecked} device(s) scanned for duplicates`);
+  }
   enrichment.initDb();
   console.log(`Router IP: ${asus.getRouterIp()}`);
   deviceId.loadOuiDb();

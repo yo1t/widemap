@@ -7,18 +7,16 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const html = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'index.html'), 'utf8');
+const html    = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'index.html'), 'utf8');
+const i18nJs  = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'js', 'i18n.js'), 'utf8');
 
-// Extract I18N object from the HTML
+// Extract I18N object from i18n.js (extracted from index.html in P2-1 Phase 1)
 function extractI18nKeys(locale) {
-  // Match the locale block: "ja: {" ... "}" or "en: {" ... "}"
-  const re = new RegExp(`\\b${locale}:\\s*\\{([^}]+(?:\\{[^}]*\\}[^}]*)*)\\}`, 'g');
   const keys = new Set();
-  // Simpler approach: find all 'key.name': patterns within the locale block
-  const localeStart = html.indexOf(`  ${locale}: {`);
+  const localeStart = i18nJs.indexOf(`  ${locale}: {`);
   if (localeStart === -1) return keys;
-  const localeEnd = html.indexOf('\n  },', localeStart);
-  const block = html.substring(localeStart, localeEnd);
+  const localeEnd = i18nJs.indexOf('\n  },', localeStart);
+  const block = i18nJs.substring(localeStart, localeEnd);
   const keyRe = /'([a-z][a-z0-9._]+)'\s*:/g;
   let m;
   while ((m = keyRe.exec(block)) !== null) {
