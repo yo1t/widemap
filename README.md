@@ -182,6 +182,8 @@ All settings are stored in `.widemap.json` (auto-generated, gitignored). You can
 | `YAMAHA_PASS` | — | Yamaha SSH password |
 | `YAMAHA_NAT` | `100` | NAT descriptor number |
 | `SUBPATH` | — | Reverse proxy sub-path (e.g. `/widemap`) |
+| `WIDEMAP_DB` | `.widemap.db` | Path to the SQLite database file |
+| `LOG_LEVEL` | `info` | Log verbosity: `error` / `warn` / `info` / `debug` |
 
 ## Features
 
