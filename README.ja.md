@@ -182,6 +182,8 @@ npm start
 | `YAMAHA_PASS` | — | Yamaha SSHパスワード |
 | `YAMAHA_NAT` | `100` | NATディスクリプタ番号 |
 | `SUBPATH` | — | リバースプロキシのサブパス（例: `/widemap`） |
+| `WIDEMAP_DB` | `.widemap.db` | SQLite データベースファイルのパス |
+| `LOG_LEVEL` | `info` | ログ詳細度: `error` / `warn` / `info` / `debug` |
 
 ## 機能詳細
 
