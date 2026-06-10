@@ -9,11 +9,13 @@ const DB_PATH = process.env.WIDEMAP_DB || '.widemap.db';
 const EVENT_RETENTION_MS = 7 * 24 * 3600_000; // 7 days
 
 let db = null;
+let _lastDbPath = DB_PATH;  // tracks the path most recently passed to initDb()
 
 // ── init ──────────────────────────────────────────────────────────────────────
 
 function initDb(dbPath) {
-  db = new Database(dbPath || DB_PATH);
+  _lastDbPath = dbPath || DB_PATH;
+  db = new Database(_lastDbPath);
   db.pragma('journal_mode = WAL');
 
   db.exec(`
@@ -132,16 +134,16 @@ function dismissBeacon(id) {
 // ── reopen (called after backup restore) ─────────────────────────────────────
 
 /**
- * Close the current SQLite connection and reopen it on the same path.
+ * Close the current SQLite connection and reopen it.
  * Used after backup.restoreFromGeneration / restoreFromFile so the module
  * always holds a live handle to the current on-disk database file.
  *
- * @param {string} [dbPath]  Override DB path (defaults to the same path used
- *                           by the last initDb call, or the env / default).
+ * @param {string} [dbPath]  Override DB path. Defaults to the path used by
+ *                           the most recent initDb() call (tracked in _lastDbPath).
  */
 function reopen(dbPath) {
   if (db) { try { db.close(); } catch {} db = null; }
-  initDb(dbPath);
+  initDb(dbPath || _lastDbPath);
 }
 
 // ── test helpers ──────────────────────────────────────────────────────────────
