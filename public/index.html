@@ -178,6 +178,16 @@
           </div>
           <button class="connect-btn" id="general-save-btn" style="margin-top:16px" data-i18n="settings.btn.save">保存</button>
           <div class="settings-status" id="general-status"></div>
+
+          <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+
+          <!-- Admin token regeneration (P2-22) -->
+          <div class="pane-title" style="cursor:default;font-size:12px;margin-bottom:8px" data-i18n="settings.token.section">🔑 管理トークン</div>
+          <p style="font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.5" data-i18n="settings.token.desc">
+            トークンを再生成すると、現在のトークンは即座に無効になり、接続中の全クライアント（他のブラウザ・端末）は再認証が必要になります。このブラウザには新しいトークンが自動で保存されます。
+          </p>
+          <button class="connect-btn" id="token-regen-btn" style="width:auto;padding:6px 16px;background:transparent;border:1px solid var(--red,#f87171);color:var(--red,#f87171)" data-i18n="settings.token.regen">トークンを再生成</button>
+          <div class="settings-status" id="token-status"></div>
         </div>
         <!-- Threat Intel settings -->
         <div class="settings-pane" id="pane-threat">

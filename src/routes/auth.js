@@ -25,9 +25,24 @@ module.exports = function authRoutes(ctx) {
     configFile, fs,
     DEFAULT_ROUTER_IP, POLL_INTERVAL,
     setLatestConnections,
+    appState, io,
   } = ctx;
 
   const router = Router();
+
+  // ── Regenerate admin token ──────────────────────────────────────────────────
+  // Invalidates the current token immediately: the config is persisted and all
+  // connected WebSocket clients are disconnected so they must re-authenticate.
+  // The new token is returned ONCE in this response — the caller must store it.
+  router.post('/admin/regenerate-token', requireAdmin, (req, res) => {
+    const newToken = crypto.randomBytes(24).toString('hex');
+    appState.adminToken = newToken;
+    saveConfig();
+    logger.warn('[auth] Admin token regenerated; all clients must re-authenticate');
+    res.json({ success: true, token: newToken });
+    // After the response: drop every socket so stale tokens stop working now
+    if (io) io.disconnectSockets(true);
+  });
 
   // ── Verify admin token (used by login UI) ──────────────────────────────────
   router.post('/admin/verify', (req, res) => {

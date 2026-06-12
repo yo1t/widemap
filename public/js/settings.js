@@ -357,6 +357,34 @@ document.getElementById('datasource-save-btn').addEventListener('click', async (
   }
 });
 
+// ── Admin token regeneration (P2-22) ──────────────────────────────────────────
+
+document.getElementById('token-regen-btn').addEventListener('click', async () => {
+  const msg = currentLang === 'ja'
+    ? '管理トークンを再生成します。\n現在のトークンは即座に無効になり、他のブラウザ・端末は再認証が必要になります。\n\n続行しますか？'
+    : 'Regenerate the admin token?\nThe current token becomes invalid immediately; every other browser/device must re-authenticate.\n\nContinue?';
+  if (!confirm(msg)) return;
+  const btn = document.getElementById('token-regen-btn');
+  btn.disabled = true;
+  try {
+    const r = await apiFetch(_BASE+'/api/admin/regenerate-token', { method: 'POST' });
+    const data = await r.json();
+    if (data.success && data.token) {
+      // Adopt the new token in this browser, then reload to re-handshake the socket
+      localStorage.setItem('widemap_admin_token', data.token);
+      adminToken = data.token;
+      showStatus('token-status', currentLang === 'ja' ? '✓ 再生成しました。再読み込みします…' : '✓ Regenerated. Reloading…', true);
+      setTimeout(() => location.reload(), 1200);
+    } else {
+      showStatus('token-status', data.error || 'Error', false);
+      btn.disabled = false;
+    }
+  } catch (e) {
+    showStatus('token-status', 'Error: ' + e.message, false);
+    btn.disabled = false;
+  }
+});
+
 // ── Beacon detection settings (P2-20) ─────────────────────────────────────────
 
 async function loadBeaconConfig() {
