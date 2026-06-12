@@ -362,13 +362,22 @@ document.getElementById('datasource-save-btn').addEventListener('click', async (
 // with a login session, so we just display the new value once for copying.
 
 document.getElementById('token-regen-btn').addEventListener('click', async () => {
+  const pw = document.getElementById('s-token-pw').value;
+  if (!pw) {
+    showStatus('token-status', t('settings.token.pwRequired'), false);
+    return;
+  }
   const msg = t('settings.token.confirm');
   if (!confirm(msg)) return;
   const btn = document.getElementById('token-regen-btn');
   btn.disabled = true;
   try {
-    const r = await apiFetch(_BASE+'/api/admin/regenerate-token', { method: 'POST' });
+    const r = await apiFetch(_BASE+'/api/admin/regenerate-token', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword: pw }),
+    });
     const data = await r.json();
+    document.getElementById('s-token-pw').value = '';
     if (data.success && data.token) {
       prompt(t('settings.token.prompt'), data.token);
       showStatus('token-status', t('settings.token.regenerated'), true);

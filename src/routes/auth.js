@@ -107,12 +107,21 @@ module.exports = function authRoutes(ctx) {
   // connected WebSocket clients are disconnected so they must re-authenticate.
   // The new token is returned ONCE in this response — the caller must store it.
   router.post('/admin/regenerate-token', requireAdmin, (req, res) => {
+    // Minting a durable credential requires the password, not just a session:
+    // a stolen session token must not survive session revocation by minting
+    // itself a new API token (same re-auth rule as change-password).
+    const { currentPassword } = req.body || {};
+    const ok = authPassword.verifyPassword(currentPassword, appState.authPasswordSalt, appState.authPasswordHash);
+    if (!ok) {
+      logger.warn('[auth] Token regeneration rejected (password check failed)');
+      return setTimeout(() => res.status(401).json({ error: '現在のパスワードが違います' }), 500);
+    }
     const newToken = crypto.randomBytes(24).toString('hex');
     appState.adminToken = newToken;
     saveConfig();
     logger.warn('[auth] Admin token regenerated; all clients must re-authenticate');
     res.json({ success: true, token: newToken });
-    // After the response: drop every socket so stale tokens stop working now
+    // After the response: drop every socket so stale legacy tokens stop working now
     if (io) io.disconnectSockets(true);
   });
 
