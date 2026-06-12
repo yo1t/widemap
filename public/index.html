@@ -215,6 +215,10 @@
           <p style="font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.5" data-i18n="settings.token.desc">
             スクリプトや自動化からの API アクセスに使う固定トークンです。再生成すると古いトークンは即座に無効になります（ブラウザのログインセッションには影響しません）。
           </p>
+          <div class="form-group" style="max-width:260px">
+            <label class="form-label" data-i18n="settings.token.password">現在のパスワード（再生成に必要）</label>
+            <input id="s-token-pw" class="form-input" type="password" autocomplete="current-password">
+          </div>
           <button class="connect-btn" id="token-regen-btn" style="width:auto;padding:6px 16px;background:transparent;border:1px solid var(--red,#f87171);color:var(--red,#f87171)" data-i18n="settings.token.regen">トークンを再生成</button>
           <div class="settings-status" id="token-status"></div>
         </div>
