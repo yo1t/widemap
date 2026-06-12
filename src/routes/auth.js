@@ -26,9 +26,81 @@ module.exports = function authRoutes(ctx) {
     DEFAULT_ROUTER_IP, POLL_INTERVAL,
     setLatestConnections,
     appState, io,
+    sessions, authPassword,
   } = ctx;
 
   const router = Router();
+
+  // ── Password login → per-device session (P2-23) ────────────────────────────
+  router.post('/auth/login', (req, res) => {
+    const { password, deviceLabel } = req.body || {};
+    if (!appState.authPasswordHash) return res.status(503).json({ error: '認証未初期化' });
+    if (typeof password !== 'string' || password.length > 256) {
+      return res.status(400).json({ error: 'パスワードを入力してください' });
+    }
+    const ok = authPassword.verifyPassword(password, appState.authPasswordSalt, appState.authPasswordHash);
+    if (!ok) {
+      logger.warn('[auth] Login failed');
+      return setTimeout(() => res.status(401).json({ error: 'パスワードが違います' }), 500);
+    }
+    const session = sessions.createSession(typeof deviceLabel === 'string' ? deviceLabel : '');
+    if (!session) return res.status(500).json({ error: 'セッション作成に失敗しました' });
+    logger.info(`[auth] Login OK (session ${session.id}: ${deviceLabel || 'unknown device'})`);
+    res.json({ success: true, token: session.token, expiresAt: session.expiresAt });
+  });
+
+  // ── Logout (revoke own session) ─────────────────────────────────────────────
+  router.post('/auth/logout', requireAdmin, (req, res) => {
+    if (req.session) sessions.revokeSession(req.session.id);
+    res.json({ success: true });
+  });
+
+  // ── Session management ──────────────────────────────────────────────────────
+  router.get('/auth/sessions', requireAdmin, (req, res) => {
+    const list = sessions.listSessions().map(s => ({
+      ...s,
+      current: req.session ? s.id === req.session.id : false,
+    }));
+    res.json({ sessions: list });
+  });
+
+  router.post('/auth/sessions/:id/revoke', requireAdmin, (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isFinite(id) || id < 1) return res.status(400).json({ error: 'invalid id' });
+    const ok = sessions.revokeSession(id);
+    if (!ok) return res.status(404).json({ error: 'session not found' });
+    res.json({ success: true });
+  });
+
+  router.post('/auth/sessions/revoke-all', requireAdmin, (req, res) => {
+    // Keep the caller's own session unless they explicitly ask to drop it too
+    const keepSelf = req.body?.includeSelf !== true && req.session;
+    const revoked  = sessions.revokeAll(keepSelf ? req.session.id : null);
+    res.json({ success: true, revoked });
+  });
+
+  // ── Change password ─────────────────────────────────────────────────────────
+  router.post('/auth/change-password', requireAdmin, (req, res) => {
+    const { currentPassword, newPassword, revokeOtherSessions } = req.body || {};
+    if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 256) {
+      return res.status(400).json({ error: '新しいパスワードは8文字以上で指定してください' });
+    }
+    const ok = authPassword.verifyPassword(currentPassword, appState.authPasswordSalt, appState.authPasswordHash);
+    if (!ok) {
+      return setTimeout(() => res.status(401).json({ error: '現在のパスワードが違います' }), 500);
+    }
+    const { salt, hash } = authPassword.hashPassword(newPassword);
+    appState.authPasswordSalt = salt;
+    appState.authPasswordHash = hash;
+    saveConfig();
+    let revoked = 0;
+    if (revokeOtherSessions === true) {
+      revoked = sessions.revokeAll(req.session ? req.session.id : null);
+      if (io) io.disconnectSockets(true);
+    }
+    logger.info(`[auth] Password changed (${revoked} other session(s) revoked)`);
+    res.json({ success: true, revoked });
+  });
 
   // ── Regenerate admin token ──────────────────────────────────────────────────
   // Invalidates the current token immediately: the config is persisted and all

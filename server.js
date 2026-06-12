@@ -6,6 +6,7 @@ try { require('dns').setDefaultResultOrder('ipv4first'); } catch {}
 
 const express = require('express');
 const http    = require('http');
+const https   = require('https');
 const { Server } = require('socket.io');
 const crypto  = require('crypto');
 const path    = require('path');
@@ -32,6 +33,8 @@ const runtime        = require('./src/runtime');
 const investigation  = require('./src/investigation');
 const beacons        = require('./src/beacons');
 const beaconDetector = require('./src/beacon-detector');
+const sessions       = require('./src/sessions');
+const authPassword   = require('./src/auth-password');
 
 // ─── Route factories ──────────────────────────────────────────────────────────
 const authRoutes        = require('./src/routes/auth');
@@ -61,6 +64,11 @@ const appState = {
   dnsmasqEnabled: true,  dnsmasqLogFile: '/var/log/dnsmasq-queries.log',
   inspectEnabled: true,  inspectLogFile: '/var/log/yamaha-router.log',
   dhcpdEnabled:   true,  dhcpdLogFile:   '/var/log/yamaha-router.log',
+  httpsEnabled:  false,
+  httpsCertPath: '',
+  httpsKeyPath:  '',
+  authPasswordHash: '',
+  authPasswordSalt: '',
   beaconConfig: {
     enabled:        true,
     minObs:         4,
@@ -92,8 +100,22 @@ const appState = {
 let lastPollEmitTime = Date.now();
 
 // ─── Express + Socket.IO setup ────────────────────────────────────────────────
-const app    = express();
-const server = http.createServer(app);
+const app = express();
+
+// HTTPS opt-in (P2-22): the protocol must be decided before the server is
+// created, so read just the https section of the config file early.
+// Default is HTTP — self-signed certs trigger browser warnings, so HTTPS
+// stays opt-in (same trade-off as comparable home-lab tools).
+const tls = require('./src/tls');
+let tlsOptions = null;
+{
+  const early = configIo.loadFile(CONFIG_FILE);
+  if (early.https?.enabled) {
+    tlsOptions = tls.loadOrCreate(early.https, __dirname);
+    if (!tlsOptions) console.error('[tls] HTTPS requested but unavailable — falling back to HTTP');
+  }
+}
+const server = tlsOptions ? https.createServer(tlsOptions, app) : http.createServer(app);
 const io     = new Server(server, {
   cors: { origin: false },
   allowRequest: (req, cb) => {
@@ -138,6 +160,15 @@ function loadConfig() {
   if (data.slack)      notifier.configure({ ...data.slack, language: appState.uiLanguage });
   if (data.adminToken) appState.adminToken = data.adminToken;
 
+  if (data.auth && typeof data.auth === 'object') {
+    appState.authPasswordHash = data.auth.passwordHash || '';
+    appState.authPasswordSalt = data.auth.salt || '';
+  }
+  if (data.https && typeof data.https === 'object') {
+    appState.httpsEnabled  = data.https.enabled === true;
+    appState.httpsCertPath = data.https.certPath || '';
+    appState.httpsKeyPath  = data.https.keyPath  || '';
+  }
   if (data.beacons && typeof data.beacons === 'object') {
     const bc = appState.beaconConfig;
     if (typeof data.beacons.enabled === 'boolean')        bc.enabled        = data.beacons.enabled;
@@ -189,6 +220,8 @@ function saveConfig() {
     inspect: { enabled: appState.inspectEnabled, logFile: appState.inspectLogFile },
     dhcpd:   { enabled: appState.dhcpdEnabled,   logFile: appState.dhcpdLogFile   },
     beacons: appState.beaconConfig,
+    https:   { enabled: appState.httpsEnabled, certPath: appState.httpsCertPath, keyPath: appState.httpsKeyPath },
+    auth:    { passwordHash: appState.authPasswordHash, salt: appState.authPasswordSalt },
   };
   // Re-read to preserve passwords (not held in module state getters)
   try {
@@ -212,21 +245,51 @@ function ensureAdminToken() {
     console.log('\n══════════════════════════════════════════════════════════════');
     console.log('  Widemap admin token (initial):');
     console.log('  ' + appState.adminToken);
-    console.log('  → ブラウザ初回アクセス時にこのトークンを入力してください');
+    console.log('  → API/自動化用トークン（ブラウザはパスワードでログイン）');
     console.log('══════════════════════════════════════════════════════════════\n');
   }
 }
 
-// ─── Auth middleware ──────────────────────────────────────────────────────────
+function ensureLoginPassword() {
+  if (!appState.authPasswordHash) {
+    const initial = authPassword.generateInitialPassword();
+    const { salt, hash } = authPassword.hashPassword(initial);
+    appState.authPasswordSalt = salt;
+    appState.authPasswordHash = hash;
+    saveConfig();
+    console.log('\n══════════════════════════════════════════════════════════════');
+    console.log('  Widemap login password (initial):');
+    console.log('  ' + initial);
+    console.log('  → ブラウザ初回アクセス時にこのパスワードでログインしてください');
+    console.log('    （設定画面からいつでも変更できます）');
+    console.log('══════════════════════════════════════════════════════════════\n');
+  }
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+// A request is authorized when the X-Admin-Token header carries either
+//   (a) a per-device session token issued by password login, or
+//   (b) the admin token (kept as an API/automation credential).
+// Returns the matching session row for (a), the string 'admin' for (b),
+// or null.  The same check covers Socket.IO handshakes.
+function authenticate(provided) {
+  if (!provided) return null;
+  const session = sessions.verifySession(provided);
+  if (session) return session;
+  if (appState.adminToken) {
+    const a = Buffer.from(provided);
+    const b = Buffer.from(appState.adminToken);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return 'admin';
+  }
+  return null;
+}
 
 function requireAdmin(req, res, next) {
-  const provided = req.get('X-Admin-Token') || '';
-  if (!appState.adminToken) return res.status(503).json({ error: '管理トークン未初期化' });
-  const a = Buffer.from(provided);
-  const b = Buffer.from(appState.adminToken);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
-    return res.status(401).json({ error: '管理トークン不正' });
-  }
+  if (!appState.adminToken) return res.status(503).json({ error: '認証未初期化' });
+  const auth = authenticate(req.get('X-Admin-Token') || '');
+  if (!auth) return res.status(401).json({ error: '認証エラー' });
+  req.session = auth === 'admin' ? null : auth;  // session row for login sessions
   next();
 }
 
@@ -405,7 +468,7 @@ const routeCtx = {
   getAdminToken:       () => appState.adminToken,
   asus, yamaha, enrichment, threatIntel, notifier, history, devices, deviceId, backup,
   dnsmasqLog, inspectSyslog, dhcpdSyslog,
-  runtime, notes, io, beacons,
+  runtime, notes, io, beacons, sessions, authPassword,
   saveConfig,
   persistSecret:       (section, updates) => configIo.persistSecret(section, updates, CONFIG_FILE),
   configFile:          CONFIG_FILE,
@@ -431,11 +494,9 @@ app.use('/api', beaconsRoutes({
 // ─── Socket.IO ────────────────────────────────────────────────────────────────
 
 io.use((socket, next) => {
-  const provided = socket.handshake.auth?.token || '';
-  if (!appState.adminToken) return next(new Error('管理トークン未初期化'));
-  const a = Buffer.from(String(provided));
-  const b = Buffer.from(appState.adminToken);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return next(new Error('Unauthorized'));
+  const provided = String(socket.handshake.auth?.token || '');
+  if (!appState.adminToken) return next(new Error('認証未初期化'));
+  if (!authenticate(provided)) return next(new Error('Unauthorized'));
   next();
 });
 
@@ -550,9 +611,12 @@ dhcpdSyslog.configure({
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 server.listen(PORT, () => {
-  console.log(`Widemap: http://localhost:${PORT}`);
+  console.log(`Widemap: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
   loadConfig();
   ensureAdminToken();
+  ensureLoginPassword();
+  sessions.initDb();
+  setInterval(() => sessions.pruneExpired(), 6 * 60 * 60 * 1000);
   notes.load();
   history.setRetentionDays(appState.retentionDays);
   history.loadConnectionHistory();

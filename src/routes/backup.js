@@ -17,7 +17,7 @@ const UPLOAD_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
  * }} ctx
  */
 module.exports = function backupRoutes(ctx) {
-  const { requireAdmin, backup, history, runtime, devices, enrichment, beacons, appRoot } = ctx;
+  const { requireAdmin, backup, history, runtime, devices, enrichment, beacons, sessions, appRoot } = ctx;
   const router = Router();
 
   router.get('/backup/list', requireAdmin, (req, res) => {
@@ -46,7 +46,8 @@ module.exports = function backupRoutes(ctx) {
       devices.reopen();                               // re-open DB connection to read restored data
       devices.seedFromConnectionHistory(history.getConnectionHistory()); // backfill devices from restored history
       enrichment.reopen();                            // RDAP/Geo キャッシュも restore 後の DB から再ロード
-      if (beacons) beacons.reopen();                  // beacon events / candidates も restore 後の DB から再ロード
+      if (beacons)  beacons.reopen();                 // beacon events / candidates も restore 後の DB から再ロード
+      if (sessions) sessions.reopen();                // ログインセッションも restore 後の DB に切り替え
       res.json({ success: true, message: `Restored from ${name}. Restart recommended.` });
     } catch (e) {
       res.status(500).json({ error: e.message });
@@ -84,7 +85,8 @@ module.exports = function backupRoutes(ctx) {
         devices.reopen();                             // re-open DB connection to read restored data
         devices.seedFromConnectionHistory(history.getConnectionHistory()); // backfill devices from restored history
         enrichment.reopen();                          // RDAP/Geo キャッシュも restore 後の DB から再ロード
-        if (beacons) beacons.reopen();                // beacon events / candidates も restore 後の DB から再ロード
+        if (beacons)  beacons.reopen();               // beacon events / candidates も restore 後の DB から再ロード
+        if (sessions) sessions.reopen();              // ログインセッションも restore 後の DB に切り替え
         res.json({ success: true, message: 'Restored from uploaded file. Restart recommended.' });
       } catch (e) {
         res.status(500).json({ error: e.message });

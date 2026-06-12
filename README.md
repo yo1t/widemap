@@ -112,19 +112,19 @@ npm install
 npm start
 ```
 
-### Step 3 — Open the browser and enter the admin token
+### Step 3 — Open the browser and log in
 
-On first startup, an **admin token** is printed to the console:
+On first startup, an initial **login password** is printed to the console:
 
 ```
 ══════════════════════════════════════════════════════════════
-  Widemap admin token (initial):
-  a1b2c3d4e5f6...
-  → Enter this token in the browser on first access
+  Widemap login password (initial):
+  KFpDqntYRfcr...
+  → Log in with this password on first access
 ══════════════════════════════════════════════════════════════
 ```
 
-Open `http://localhost:3000` and enter the token.
+Open `http://localhost:3000` and enter the password. Each browser/device gets its own login session (30-day sliding expiry); you can review and revoke them — and change the password — in Settings → General.
 
 ### Step 4 — Configure your router
 
@@ -139,34 +139,52 @@ Open the Settings panel (⚙) and enter your router details:
 
 Within a few seconds, devices and connections will start appearing on the map.
 
-> **Note:** The admin token is generated once on first startup and saved in `.widemap.json`. If you lose it, delete `.widemap.json` and restart — a new token will be generated.
+> **Note:** Credentials are generated once on first startup and saved (hashed) in `.widemap.json`. If you lose the password, remove the `auth` section from `.widemap.json` and restart — a new initial password will be printed.
 
-## Admin Token
+## Authentication
 
-The admin token protects all API endpoints and the WebSocket connection. It is required every time you open the browser UI.
+All API endpoints and the WebSocket connection are protected. Two credentials exist:
 
-### Where to find it
+| Credential | Purpose | Where |
+|-----------|---------|-------|
+| **Login password** | Browser login. Each device gets its own revocable session (30-day sliding expiry) | Printed on first startup; change it in Settings → General |
+| **API token** | Scripts / automation (`X-Admin-Token` header) | `.widemap.json` (`adminToken`); regenerate in Settings → General |
 
-1. **First startup** — printed to the console (stdout) as shown above
-2. **After first startup** — stored in `.widemap.json` (field: `adminToken`)
+### Session management
 
-### If you lose the token
+- Settings → General lists every logged-in device with last-activity time
+- Revoke a single device, or log out all other devices at once
+- Changing the password can optionally revoke all other sessions
+
+### If you lose the password
 
 ```bash
-# Option 1: Read from the config file
-cat .widemap.json | grep adminToken
-
-# Option 2: Reset (generates a new token)
-rm .widemap.json
+# Remove the auth section and restart — a new initial password is printed
+node -e "const f='.widemap.json',c=require('./'+f);delete c.auth;require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
 npm start
 ```
 
 ### How it works
 
-- The browser prompts for the token on first access and stores it in `localStorage`
-- Every API request includes the token in the `X-Admin-Token` header
-- WebSocket connections pass the token via Socket.IO handshake auth
-- Token comparison uses `crypto.timingSafeEqual` to prevent timing attacks
+- Passwords are hashed with scrypt; sessions are stored as SHA-256 hashes in SQLite
+- Failed logins are delayed 500 ms; comparisons use `crypto.timingSafeEqual`
+- Session tokens ride the same `X-Admin-Token` header / Socket.IO handshake as the API token
+
+## HTTPS (optional)
+
+By default Widemap serves plain HTTP. To enable HTTPS, add to `.widemap.json` and restart:
+
+```json
+"https": { "enabled": true }
+```
+
+A self-signed certificate (`.widemap-cert.pem` / `.widemap-key.pem`, 10-year validity) is generated automatically via the `openssl` CLI — your browser will show a one-time warning to accept it. To use your own certificate instead:
+
+```json
+"https": { "enabled": true, "certPath": "/path/to/cert.pem", "keyPath": "/path/to/key.pem" }
+```
+
+HTTPS is recommended if you use the login password from multiple devices, since it protects credentials and dashboard data from eavesdropping inside the LAN.
 
 ## Configuration
 
