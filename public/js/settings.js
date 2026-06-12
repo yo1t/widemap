@@ -357,12 +357,14 @@ document.getElementById('datasource-save-btn').addEventListener('click', async (
   }
 });
 
-// ── Admin token regeneration (P2-22) ──────────────────────────────────────────
+// ── API token regeneration (P2-22) ────────────────────────────────────────────
+// The API token is an automation credential; the browser itself authenticates
+// with a login session, so we just display the new value once for copying.
 
 document.getElementById('token-regen-btn').addEventListener('click', async () => {
   const msg = currentLang === 'ja'
-    ? '管理トークンを再生成します。\n現在のトークンは即座に無効になり、他のブラウザ・端末は再認証が必要になります。\n\n続行しますか？'
-    : 'Regenerate the admin token?\nThe current token becomes invalid immediately; every other browser/device must re-authenticate.\n\nContinue?';
+    ? 'API トークンを再生成します。\n古いトークンを使っているスクリプト・自動化は失敗するようになります。\n\n続行しますか？'
+    : 'Regenerate the API token?\nScripts/automation using the old token will stop working.\n\nContinue?';
   if (!confirm(msg)) return;
   const btn = document.getElementById('token-regen-btn');
   btn.disabled = true;
@@ -370,20 +372,100 @@ document.getElementById('token-regen-btn').addEventListener('click', async () =>
     const r = await apiFetch(_BASE+'/api/admin/regenerate-token', { method: 'POST' });
     const data = await r.json();
     if (data.success && data.token) {
-      // Adopt the new token in this browser, then reload to re-handshake the socket
-      localStorage.setItem('widemap_admin_token', data.token);
-      adminToken = data.token;
-      showStatus('token-status', currentLang === 'ja' ? '✓ 再生成しました。再読み込みします…' : '✓ Regenerated. Reloading…', true);
-      setTimeout(() => location.reload(), 1200);
+      prompt(currentLang === 'ja'
+        ? '新しい API トークン（この画面でしか表示されません。必要ならコピーしてください）:'
+        : 'New API token (shown only once — copy it if needed):', data.token);
+      showStatus('token-status', currentLang === 'ja' ? '✓ 再生成しました' : '✓ Regenerated', true);
     } else {
       showStatus('token-status', data.error || 'Error', false);
-      btn.disabled = false;
     }
   } catch (e) {
     showStatus('token-status', 'Error: ' + e.message, false);
+  } finally {
     btn.disabled = false;
   }
 });
+
+// ── Password change (P2-23) ───────────────────────────────────────────────────
+
+document.getElementById('pw-change-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('pw-change-btn');
+  const current = document.getElementById('s-pw-current').value;
+  const next    = document.getElementById('s-pw-new').value;
+  if (next.length < 8) {
+    showStatus('pw-status', currentLang === 'ja' ? '新しいパスワードは8文字以上にしてください' : 'New password must be at least 8 characters', false);
+    return;
+  }
+  btn.disabled = true;
+  try {
+    const r = await apiFetch(_BASE+'/api/auth/change-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currentPassword: current,
+        newPassword: next,
+        revokeOtherSessions: document.getElementById('s-pw-revoke-others').checked,
+      }),
+    });
+    const data = await r.json();
+    if (data.success) {
+      document.getElementById('s-pw-current').value = '';
+      document.getElementById('s-pw-new').value = '';
+      showStatus('pw-status', currentLang === 'ja' ? `✓ 変更しました（他セッション失効: ${data.revoked}件）` : `✓ Changed (${data.revoked} other session(s) revoked)`, true);
+      loadSessionsList();
+    } else {
+      showStatus('pw-status', data.error || 'Error', false);
+    }
+  } catch (e) {
+    showStatus('pw-status', 'Error: ' + e.message, false);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── Login sessions list (P2-23) ───────────────────────────────────────────────
+
+async function loadSessionsList() {
+  const box = document.getElementById('sessions-list');
+  try {
+    const r = await apiFetch(_BASE+'/api/auth/sessions');
+    const { sessions } = await r.json();
+    if (!sessions || !sessions.length) {
+      box.innerHTML = `<span style="color:var(--muted)">${esc(t('settings.sessions.none'))}</span>`;
+      return;
+    }
+    box.innerHTML = sessions.map(s => `
+      <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+        <span style="flex:1">${esc(s.deviceLabel || 'Unknown device')}${s.current ? ` <span style="color:var(--green);font-size:9px">● ${esc(t('settings.sessions.current'))}</span>` : ''}</span>
+        <span style="color:var(--muted);font-size:10px">${fmtTs(s.lastSeenAt)}</span>
+        ${s.current ? '' : `<button class="beacon-dismiss-btn" data-session-id="${s.id}">${esc(t('settings.sessions.revoke'))}</button>`}
+      </div>`).join('');
+    box.querySelectorAll('[data-session-id]').forEach(b => {
+      b.addEventListener('click', async () => {
+        await apiFetch(_BASE+`/api/auth/sessions/${b.dataset.sessionId}/revoke`, { method: 'POST' });
+        loadSessionsList();
+      });
+    });
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--muted)">Error: ${esc(e.message)}</span>`;
+  }
+}
+
+document.getElementById('sessions-revoke-all-btn').addEventListener('click', async () => {
+  try {
+    const r = await apiFetch(_BASE+'/api/auth/sessions/revoke-all', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const data = await r.json();
+    showStatus('sessions-status', data.success ? `✓ ${data.revoked}` : (data.error || 'Error'), data.success);
+    loadSessionsList();
+  } catch (e) {
+    showStatus('sessions-status', 'Error: ' + e.message, false);
+  }
+});
+
+// Load sessions when the General tab is opened
+const generalTabBtn = document.querySelector('[data-tab="general"]');
+if (generalTabBtn) generalTabBtn.addEventListener('click', loadSessionsList);
 
 // ── Beacon detection settings (P2-20) ─────────────────────────────────────────
 

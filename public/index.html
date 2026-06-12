@@ -181,10 +181,39 @@
 
           <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
 
-          <!-- Admin token regeneration (P2-22) -->
-          <div class="pane-title" style="cursor:default;font-size:12px;margin-bottom:8px" data-i18n="settings.token.section">🔑 管理トークン</div>
+          <!-- Login password (P2-23) -->
+          <div class="pane-title" style="cursor:default;font-size:12px;margin-bottom:8px" data-i18n="settings.password.section">🔐 ログインパスワード</div>
+          <div class="settings-row">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.password.current">現在のパスワード</label>
+              <input id="s-pw-current" class="form-input" type="password" autocomplete="current-password">
+            </div>
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.password.new">新しいパスワード（8文字以上）</label>
+              <input id="s-pw-new" class="form-input" type="password" autocomplete="new-password">
+            </div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:11px;cursor:pointer;margin-bottom:8px">
+            <input type="checkbox" id="s-pw-revoke-others" checked style="accent-color:var(--accent)">
+            <span data-i18n="settings.password.revokeOthers">変更時に他の端末のセッションを全て失効する</span>
+          </label>
+          <button class="connect-btn" id="pw-change-btn" style="width:auto;padding:6px 16px" data-i18n="settings.password.change">パスワードを変更</button>
+          <div class="settings-status" id="pw-status"></div>
+
+          <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+
+          <!-- Login sessions (P2-23) -->
+          <div class="pane-title" style="cursor:default;font-size:12px;margin-bottom:8px" data-i18n="settings.sessions.section">📱 ログイン中の端末</div>
+          <div id="sessions-list" style="font-size:11px"></div>
+          <button class="connect-btn" id="sessions-revoke-all-btn" style="width:auto;padding:5px 14px;margin-top:8px;font-size:10px;background:transparent;border:1px solid var(--border);color:var(--muted)" data-i18n="settings.sessions.revokeAll">他の端末を全てログアウト</button>
+          <div class="settings-status" id="sessions-status"></div>
+
+          <hr style="border:none;border-top:1px solid var(--border);margin:20px 0">
+
+          <!-- API token regeneration (P2-22) -->
+          <div class="pane-title" style="cursor:default;font-size:12px;margin-bottom:8px" data-i18n="settings.token.section">🔑 API トークン</div>
           <p style="font-size:10px;color:var(--muted);margin-bottom:10px;line-height:1.5" data-i18n="settings.token.desc">
-            トークンを再生成すると、現在のトークンは即座に無効になり、接続中の全クライアント（他のブラウザ・端末）は再認証が必要になります。このブラウザには新しいトークンが自動で保存されます。
+            スクリプトや自動化からの API アクセスに使う固定トークンです。再生成すると古いトークンは即座に無効になります（ブラウザのログインセッションには影響しません）。
           </p>
           <button class="connect-btn" id="token-regen-btn" style="width:auto;padding:6px 16px;background:transparent;border:1px solid var(--red,#f87171);color:var(--red,#f87171)" data-i18n="settings.token.regen">トークンを再生成</button>
           <div class="settings-status" id="token-status"></div>

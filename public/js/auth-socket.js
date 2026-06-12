@@ -2,22 +2,41 @@
 // ─── Admin token auth (saved in localStorage) ─────────────────────────
 const TOKEN_KEY = 'widemap_admin_token';
 let adminToken = localStorage.getItem(TOKEN_KEY) || '';
+
+// Short device label sent at login so the sessions list in settings is readable
+function describeThisDevice() {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? 'Edge'
+                : /Chrome\//.test(ua) ? 'Chrome'
+                : /Firefox\//.test(ua) ? 'Firefox'
+                : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  const os = /iPhone|iPad/.test(ua) ? 'iOS'
+           : /Android/.test(ua) ? 'Android'
+           : /Mac/.test(ua) ? 'macOS'
+           : /Windows/.test(ua) ? 'Windows'
+           : /Linux/.test(ua) ? 'Linux' : '';
+  return os ? `${browser} on ${os}` : browser;
+}
+
+// Password login → per-device session token, stored under the same key so
+// apiFetch / Socket.IO need no changes.  A legacy admin token already in
+// localStorage keeps working — the server accepts both credentials.
 async function promptAdminToken(reason = '') {
   while (true) {
-    // ⚠️ Local var name conflicts with the t() function, so use "tok"
-    const tok = prompt((reason ? reason + '\n\n' : '') + t('prompt.token'));
-    if (tok === null) { alert(t('alert.tokenRequired')); continue; }
+    const pw = prompt((reason ? reason + '\n\n' : '') + t('prompt.password'));
+    if (pw === null) { alert(t('alert.passwordRequired')); continue; }
     try {
-      const r = await fetch(_BASE+'/api/admin/verify', {
+      const r = await fetch(_BASE+'/api/auth/login', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tok }),
+        body: JSON.stringify({ password: pw, deviceLabel: describeThisDevice() }),
       });
-      if (r.ok) {
-        adminToken = tok;
-        localStorage.setItem(TOKEN_KEY, tok);
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.token) {
+        adminToken = data.token;
+        localStorage.setItem(TOKEN_KEY, data.token);
         return;
       }
-      alert(t('err.tokenInvalid'));
+      alert(data.error || t('err.passwordInvalid'));
     } catch (e) {
       alert(t('err.serverGeneric') + e.message);
     }
@@ -35,10 +54,10 @@ async function apiFetch(url, opts = {}) {
   const headers = { ...(opts.headers || {}), 'X-Admin-Token': adminToken };
   const res = await fetch(url, { ...opts, headers });
   if (res.status === 401) {
-    // Token expired or mis-entered
+    // Session expired or revoked → log in again
     localStorage.removeItem(TOKEN_KEY);
     adminToken = '';
-    await promptAdminToken('トークンが拒否されました。再入力してください。');
+    await promptAdminToken(t('err.sessionExpired'));
     return apiFetch(url, opts); // retry
   }
   return res;
@@ -49,7 +68,7 @@ socket.on('connect_error', err => {
   if (String(err.message).toLowerCase().includes('unauth')) {
     localStorage.removeItem(TOKEN_KEY);
     adminToken = '';
-    promptAdminToken('WebSocket認証エラー。トークンを再入力してください。')
+    promptAdminToken(t('err.sessionExpired'))
       .then(() => location.reload());
   }
 });
