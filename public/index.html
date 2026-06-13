@@ -85,7 +85,11 @@
               <input id="s-yamaha-nat" class="form-input" type="text" placeholder="100" value="100" autocomplete="off" style="width:80px;">
             </div>
           </div>
-          <button class="connect-btn" id="yamaha-connect-btn" data-i18n="settings.btn.connect">接続</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="connect-btn" id="yamaha-detect-btn" data-i18n="settings.yamaha.detect">接続して自動検出</button>
+            <button class="connect-btn" id="yamaha-connect-btn" data-i18n="settings.yamaha.saveSuggested">この設定を保存</button>
+          </div>
+          <div class="settings-status" id="yamaha-detect-status"></div>
           <div class="settings-status" id="yamaha-status"></div>
         </div>
         <!-- L2: ASUS -->
@@ -485,6 +489,7 @@
   <h1>Widemap</h1>
   <div class="view-tabs">
     <button class="view-tab active" id="btn-graph" data-i18n="tab.graph">📊 グラフマップ</button>
+    <button class="view-tab" id="btn-dashboard" data-i18n="tab.dashboard">🌐 ダッシュボード</button>
     <button class="view-tab" id="btn-map" data-i18n="tab.map">🗺 地図</button>
     <button class="view-tab" id="btn-stats" data-i18n="tab.stats">📈 統計情報</button>
     <button class="view-tab" id="btn-log" data-i18n="tab.log">📋 通信ログ</button>
@@ -502,7 +507,7 @@
       <option value="today"     data-i18n="period.today">本日</option>
       <option value="yesterday" data-i18n="period.yesterday">昨日</option>
       <option value="7d"        data-i18n="period.7d">1週間以内</option>
-      <option value="all"       data-i18n="period.all">全期間</option>
+      <option value="14d"       data-i18n="period.14d">2週間以内</option>
       <option value="custom"    data-i18n="period.custom">期間指定…</option>
     </select>
     <span id="custom-range" style="display:none; margin-left:6px; align-items:center; gap:4px;">
@@ -548,6 +553,33 @@
 <div id="toast-container"></div>
 
 <div class="main">
+  <div id="dashboard-container" style="display:none">
+    <div class="dash-top">
+      <div class="dash-cell" id="dash-globe">
+        <div class="dash-cell-label">🌐 <span data-i18n="dash.globe">GLOBE</span></div>
+        <svg id="dash-globe-svg"></svg>
+      </div>
+      <div class="dash-cell" id="dash-flat">
+        <div class="dash-cell-label">🗺 <span data-i18n="dash.flat">FLAT MAP</span></div>
+        <svg id="dash-flat-svg"></svg>
+      </div>
+    </div>
+    <div class="dash-bottom">
+      <div class="dash-log-head">📋 <span data-i18n="dash.log">通信ログ（リアルタイム）</span></div>
+      <div class="dash-logwrap">
+        <table class="dash-log">
+          <thead><tr>
+            <th data-i18n="dash.col.src">送信元</th>
+            <th data-i18n="dash.col.dst">宛先</th>
+            <th data-i18n="dash.col.port">Port</th>
+            <th data-i18n="dash.col.loc">場所</th>
+            <th data-i18n="dash.col.threat">脅威</th>
+          </tr></thead>
+          <tbody id="dash-log-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
   <div id="map-container" style="display:none">
     <svg id="world-map"></svg>
     <div class="map-tooltip" id="map-tooltip"></div>
@@ -782,6 +814,7 @@
 <script src="__BASE__/js/graph.js"></script>
 <script src="__BASE__/js/settings.js"></script>
 <script src="__BASE__/js/map.js"></script>
+<script src="__BASE__/js/dashboard.js"></script>
 <script src="__BASE__/js/stats.js"></script>
 <script src="__BASE__/js/time-filter.js"></script>
 <script src="__BASE__/js/view-tabs.js"></script>

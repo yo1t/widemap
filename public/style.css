@@ -169,6 +169,26 @@
   /* ── Main layout ─────────────────────────────────── */
   .main { display: flex; flex: 1; overflow: hidden; }
   #graph-container { flex: 1; position: relative; overflow: hidden; }
+
+  /* ── Dashboard view ──────────────────────────────── */
+  #dashboard-container { flex: 1; display: none; flex-direction: column; min-height: 0; background: #050a14; }
+  #dashboard-container.dash-flex { display: flex; }
+  .dash-top { display: grid; grid-template-columns: minmax(0, 0.62fr) minmax(0, 1.38fr); gap: 8px; height: 230px; flex-shrink: 0; padding: 8px 8px 0; }
+  .dash-cell { position: relative; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #0a1322; min-height: 0; }
+  .dash-cell svg { display: block; width: 100%; height: 100%; }
+  .dash-cell-label { position: absolute; top: 7px; left: 10px; font-size: 10px; font-weight: 600; color: #7c8aa3; z-index: 3; letter-spacing: 0.03em; pointer-events: none; }
+  .dash-bottom { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 6px 8px 8px; }
+  .dash-log-head { font-size: 10px; font-weight: 600; color: #7c8aa3; padding: 4px 4px 6px; }
+  .dash-logwrap { flex: 1; border: 1px solid var(--border); border-radius: 8px; background: #0a1322; overflow: auto; }
+  .dash-log { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .dash-log th { text-align: left; color: var(--muted); font-weight: 600; padding: 5px 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #0c1626; z-index: 1; }
+  .dash-log td { padding: 5px 8px; border-bottom: 1px solid rgba(255,255,255,0.04); white-space: nowrap; }
+  .dash-log tr:hover td { background: rgba(255,255,255,0.03); }
+  .dash-pill { font-size: 9px; padding: 1px 6px; border-radius: 3px; }
+  .dash-pill.ok { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .dash-pill.bad { background: rgba(239,68,68,0.18); color: #f87171; }
+  #dash-globe svg { cursor: grab; }
+  #dash-globe svg:active { cursor: grabbing; }
   /* ── Zoom controls ────────────────────────────────── */
   .zoom-controls {
     position: absolute; right: 10px; bottom: 16px;
@@ -526,6 +546,11 @@
     .main { flex-direction: column; overflow: visible; }
     /* Graph/Map/Stats use fixed heights (only the active one is shown via display) */
     #graph-container, #map-container, #stats-container { flex: 0 0 auto; height: 38vh; min-height: 220px; }
+    /* Dashboard: stack globe → flat map → log vertically and scroll */
+    #dashboard-container { flex: 0 0 auto; height: auto; }
+    .dash-top { display: flex; flex-direction: column; height: auto; gap: 8px; }
+    .dash-cell { height: 240px; }
+    .dash-bottom { min-height: 50vh; }
     /* In stats mode, give the chart area a bit more room */
     body.is-stats-mode #stats-container { height: 55vh; }
     /* Mobile: shrink chart padding, compact legend */

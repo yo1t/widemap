@@ -70,7 +70,13 @@ socket.on('connections-update', data => {
     allConnections = [...map.values()];
   } else {
     allConnections = incoming;
-    dataRangeFrom = 0;
+    if (data.initialLoad) {
+      const serverNow = data.serverTime || Date.now();
+      dataRangeFrom = serverNow - 3600_000;
+    } else {
+      const oldest = incoming.reduce((min, c) => Math.min(min, c.lastSeen || c.firstSeen || min), Infinity);
+      dataRangeFrom = Number.isFinite(oldest) ? oldest : Date.now() - 3600_000;
+    }
   }
   if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
   if (!asusActive) {
@@ -81,6 +87,7 @@ socket.on('connections-update', data => {
   if (mapMode) updateMapDots();
   if (statsMode) updateStats();
   if (logMode) updateLogView();
+  if (dashMode) updateDashboard();
   // Immediately update the panel for the currently selected device
   const selNode = nodes.find(n => n.id === selectedMac);
   const selIp   = selNode?.client?.ip || null;
@@ -105,6 +112,7 @@ socket.on('connections-update', data => {
         if (mapMode) updateMapDots();
         if (statsMode) updateStats();
         if (logMode) updateLogView();
+        if (dashMode) updateDashboard();
       })
       .catch(e => console.warn('[connections] background 24h fetch failed:', e));
   }
