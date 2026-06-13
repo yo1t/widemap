@@ -47,3 +47,5 @@ playwright-report/
 # TLS 証明書（自己署名・自動生成）
 .widemap-cert.pem
 .widemap-key.pem
+# conntrack 検証環境（内部用・公開しない）
+dev-conntrack/
