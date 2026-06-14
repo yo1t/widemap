@@ -9,6 +9,8 @@ var stColorScale = null;
 var stSpin = true, stSpinTimer = null, stSpinResume = null;
 var stFlatParticles = [], stFlatAnimId = null;
 var stSelIp = null; // active device filter (null = all)
+const ST_SPEEDS = [0.04, 0.08, 0.16, 0.32, 0.64];
+var stSpeedIdx = 2; // default: ST_SPEEDS[2] = 0.16
 
 function stColor(d) {
   return d.threat ? '#ff2d55' : (stColorScale ? stColorScale(d.totalSessions) : '#9333ea');
@@ -226,7 +228,7 @@ function stStartSpin() {
   stSpinTimer = d3.timer(() => {
     if (!statsMode) return;
     if (stSpin && stGlobeProj) {
-      stGlobeRotate[0] += 0.16;
+      stGlobeRotate[0] += ST_SPEEDS[stSpeedIdx];
       stGlobeProj.rotate(stGlobeRotate);
       stRenderGlobeData();
     }
@@ -237,6 +239,45 @@ function stStopSpin() {
   if (stSpinTimer) { stSpinTimer.stop(); stSpinTimer = null; }
 }
 
+function stUpdateSpinUI() {
+  const btn = document.getElementById('st-spin-toggle');
+  if (btn) btn.textContent = stSpin ? '⏸' : '▶';
+  const slower = document.getElementById('st-spin-slower');
+  const faster = document.getElementById('st-spin-faster');
+  if (slower) slower.disabled = stSpeedIdx === 0;
+  if (faster) faster.disabled = stSpeedIdx === ST_SPEEDS.length - 1;
+}
+
+function stInitControls() {
+  const cell = document.getElementById('st-globe');
+  if (!cell) return;
+  let ctrl = document.getElementById('st-globe-controls');
+  if (!ctrl) {
+    ctrl = document.createElement('div');
+    ctrl.id = 'st-globe-controls';
+    ctrl.className = 'globe-controls';
+    ctrl.innerHTML =
+      '<button class="globe-ctrl-btn" id="st-spin-slower" title="遅く">−</button>' +
+      '<button class="globe-ctrl-btn" id="st-spin-toggle" title="停止 / 再生">⏸</button>' +
+      '<button class="globe-ctrl-btn" id="st-spin-faster" title="速く">＋</button>';
+    cell.appendChild(ctrl);
+    document.getElementById('st-spin-toggle').addEventListener('click', () => {
+      stSpin = !stSpin;
+      if (stSpin && !stSpinTimer) stStartSpin();
+      stUpdateSpinUI();
+    });
+    document.getElementById('st-spin-slower').addEventListener('click', () => {
+      if (stSpeedIdx > 0) stSpeedIdx--;
+      stUpdateSpinUI();
+    });
+    document.getElementById('st-spin-faster').addEventListener('click', () => {
+      if (stSpeedIdx < ST_SPEEDS.length - 1) stSpeedIdx++;
+      stUpdateSpinUI();
+    });
+  }
+  stUpdateSpinUI();
+}
+
 function initStatsMaps(resetRotation) {
   if (resetRotation) stGlobeRotate = null; // force re-center on home country
   dashEnsureGeo(() => {
@@ -244,6 +285,7 @@ function initStatsMaps(resetRotation) {
     stRenderFlatBase();
     stRenderGlobeData();
     stRenderFlatData();
+    stInitControls();
     stStartSpin();
   });
 }
