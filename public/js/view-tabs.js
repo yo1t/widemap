@@ -29,7 +29,7 @@ function switchView(view) {
   if (view === 'dashboard') requestAnimationFrame(initDashboard);
   else if (typeof dashStopSpin === 'function') dashStopSpin();
   if (view === 'stats')   requestAnimationFrame(updateStats);
-  else if (typeof stStopSpin === 'function') stStopSpin();
+  else { if (typeof stStopSpin === 'function') stStopSpin(); if (typeof stStopFlatAnim === 'function') stStopFlatAnim(); }
   if (view === 'log')     requestAnimationFrame(() => { updateLogView(); loadBeacons(); });
   if (view === 'devices') requestAnimationFrame(loadDevicesView);
 }

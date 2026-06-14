@@ -7,6 +7,7 @@ var stFlatSvg = null, stFlatProj = null, stFlatPath = null;
 var stGlobeRotate = [-139, -20];
 var stColorScale = null;
 var stSpin = true, stSpinTimer = null, stSpinResume = null;
+var stFlatParticles = [], stFlatAnimId = null;
 
 function stColor(d) {
   return d.threat ? '#ff2d55' : (stColorScale ? stColorScale(d.totalSessions) : '#9333ea');
@@ -95,16 +96,40 @@ function stRenderGlobeData() {
   });
 }
 
+function stStopFlatAnim() {
+  if (stFlatAnimId) { cancelAnimationFrame(stFlatAnimId); stFlatAnimId = null; }
+  stFlatParticles = [];
+}
+
+function stStartFlatAnim() {
+  if (stFlatAnimId) return;
+  const tick = () => {
+    stFlatParticles.forEach(p => {
+      p.t = (p.t + p.speed) % 1.0;
+      try {
+        const pt = p.pathEl.getPointAtLength(p.t * p.totalLength);
+        const col = d3.interpolate('#fffde7', p.orgColor)(Math.min(p.t * 2.8, 1));
+        const opacity = p.t > 0.85 ? (1 - p.t) / 0.15 : 1;
+        d3.select(p.dotEl).attr('cx', pt.x).attr('cy', pt.y).attr('fill', col).attr('opacity', opacity);
+      } catch(_) {}
+    });
+    stFlatAnimId = requestAnimationFrame(tick);
+  };
+  stFlatAnimId = requestAnimationFrame(tick);
+}
+
 function stRenderFlatBase() {
   const cell = document.getElementById('st-flat');
   if (!cell) return false;
   const w = cell.clientWidth, h = cell.clientHeight;
   if (!w || !h) return false;
+  stStopFlatAnim();
   stFlatSvg = d3.select('#st-flat-svg').attr('viewBox', `0 0 ${w} ${h}`);
   stFlatSvg.selectAll('*').remove();
   stFlatSvg.append('defs').html(`
     <radialGradient id="sf-ocean" cx="48%" cy="42%" r="80%"><stop offset="0" stop-color="#10254a"/><stop offset="55%" stop-color="#0a1730"/><stop offset="100%" stop-color="#050a14"/></radialGradient>
     <filter id="sf-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+  stFlatSvg.append('defs').attr('id', 'sf-arc-grads');
   stFlatProj = d3.geoNaturalEarth1().rotate(getMapRotation()).fitSize([w, h], worldGeo);
   stFlatPath = d3.geoPath(stFlatProj);
   stFlatSvg.append('path').datum({type:'Sphere'}).attr('fill','url(#sf-ocean)').attr('d', stFlatPath);
@@ -112,6 +137,7 @@ function stRenderFlatBase() {
   stFlatSvg.append('g').attr('filter','url(#sf-glow)').selectAll('path').data(worldGeo.features).join('path')
     .attr('fill','#0c2036').attr('stroke','#38bdf8').attr('stroke-width',0.5).attr('stroke-opacity',0.85).attr('d', stFlatPath);
   stFlatSvg.append('g').attr('class','sf-arcs').attr('filter','url(#sf-glow)');
+  stFlatSvg.append('g').attr('class','sf-particles');
   stFlatSvg.append('g').attr('class','sf-dots').attr('filter','url(#sf-glow)');
   stFlatSvg.append('g').attr('class','sf-pulses');
   return true;
@@ -119,29 +145,75 @@ function stRenderFlatBase() {
 
 function stRenderFlatData() {
   if (!stFlatSvg || !stFlatProj) return;
+  stStopFlatAnim();
   const home = getHomeCoord();
   const hxy = stFlatProj([home.lon, home.lat]);
   const pts = buildMapPoints();
   const maxS = Math.max(2, ...pts.map(d => d.totalSessions));
-  const rScale = d => 2.5 + Math.sqrt(d.totalSessions / maxS) * 6;
-  const arc = (a, b) => { const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2, lf=Math.min(Math.hypot(b[0]-a[0],b[1]-a[1])*0.3,80); return `M${a[0]},${a[1]} Q${mx},${my-lf} ${b[0]},${b[1]}`; };
-  const items = pts.map(d => ({ d, xy: stFlatProj([d.lon, d.lat]) || [-100,-100] }));
-  stFlatSvg.select('.sf-arcs').selectAll('path').data(items).join('path')
-    .attr('d', o => arc(hxy, o.xy)).attr('fill','none').attr('stroke', o => stColor(o.d))
-    .attr('stroke-width', o => o.d.threat ? 1.6 : 1).attr('stroke-linecap','round')
-    .attr('stroke-opacity', o => o.d.threat ? 0.9 : 0.5);
-  stFlatSvg.select('.sf-dots').selectAll('circle').data(items).join('circle')
+  const rScale = d => 4 + Math.sqrt(d.totalSessions / maxS) * 10;
+  const ballisticD = (a, b) => {
+    const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2;
+    const lf = Math.min(Math.hypot(b[0]-a[0], b[1]-a[1]) * 0.38, 160);
+    return `M${a[0]},${a[1]} Q${mx},${my-lf} ${b[0]},${b[1]}`;
+  };
+  const items = pts.map(d => ({ d, xy: stFlatProj([d.lon, d.lat]) || [-200,-200] }));
+
+  // Per-arc linearGradient: bright cyan at home → org colour at destination
+  const gradsDefs = stFlatSvg.select('#sf-arc-grads');
+  gradsDefs.selectAll('*').remove();
+  const arcGradId = d => 'sfg-' + (d.key||d.org||d.dst||'x').replace(/[^a-zA-Z0-9_-]/g,'_');
+  items.forEach(o => {
+    const endCol = stColor(o.d);
+    const g = gradsDefs.append('linearGradient')
+      .attr('id', arcGradId(o.d)).attr('gradientUnits','userSpaceOnUse')
+      .attr('x1',hxy[0]).attr('y1',hxy[1]).attr('x2',o.xy[0]).attr('y2',o.xy[1]);
+    g.append('stop').attr('offset','0').attr('stop-color','#bff7ff').attr('stop-opacity',0.95);
+    g.append('stop').attr('offset','1').attr('stop-color',endCol).attr('stop-opacity',0.9);
+  });
+
+  // Gradient arcs
+  stFlatSvg.select('.sf-arcs').selectAll('path').data(items, o => o.d.key).join('path')
+    .attr('d', o => ballisticD(hxy, o.xy))
+    .attr('fill','none')
+    .attr('stroke', o => `url(#${arcGradId(o.d)})`)
+    .attr('stroke-linecap','round')
+    .attr('stroke-width', o => o.d.threat ? 2 : 1.2)
+    .attr('stroke-opacity', o => o.d.threat ? 0.95 : (0.35 + 0.65 * (o.d.freshness ?? 1)));
+
+  // Destination dots
+  stFlatSvg.select('.sf-dots').selectAll('circle').data(items, o => o.d.key).join('circle')
     .attr('cx', o => o.xy[0]).attr('cy', o => o.xy[1]).attr('r', o => rScale(o.d))
     .attr('fill', o => stColor(o.d)).attr('fill-opacity', 0.9)
     .attr('filter', o => o.d.threat ? 'url(#sf-glow)' : null);
+
+  // Threat pulse rings + home marker
   const pulses = stFlatSvg.select('.sf-pulses');
   pulses.selectAll('*').remove();
-  pulses.append('circle').attr('cx', hxy[0]).attr('cy', hxy[1]).attr('r', 4).attr('fill','#ffe9a6').attr('filter','url(#sf-glow)');
+  pulses.append('circle').attr('cx',hxy[0]).attr('cy',hxy[1]).attr('r',4).attr('fill','#ffe9a6').attr('filter','url(#sf-glow)');
   items.filter(o => o.d.threat).forEach(o => {
     const ring = pulses.append('circle').attr('cx',o.xy[0]).attr('cy',o.xy[1]).attr('r',5).attr('fill','none').attr('stroke','#ff2d55').attr('stroke-width',1.8);
     ring.append('animate').attr('attributeName','r').attr('values','5;22').attr('dur','1.4s').attr('repeatCount','indefinite');
     ring.append('animate').attr('attributeName','stroke-opacity').attr('values','0.9;0').attr('dur','1.4s').attr('repeatCount','indefinite');
   });
+
+  // Particles along arcs
+  const particlesG = stFlatSvg.select('.sf-particles');
+  particlesG.selectAll('*').remove();
+  stFlatSvg.select('.sf-arcs').selectAll('path').each(function(o) {
+    const pathEl = this;
+    const totalLength = pathEl.getTotalLength();
+    if (totalLength < 5) return;
+    const pct = o.d.totalSessions / maxS;
+    const speed = (0.0025 + pct * 0.0095) * (0.3 + 0.7 * (o.d.freshness ?? 1));
+    const nParts = pct > 0.5 ? 4 : pct > 0.2 ? 3 : pct > 0.05 ? 2 : 1;
+    const orgColor = stColor(o.d);
+    for (let i = 0; i < nParts; i++) {
+      const dotEl = particlesG.append('circle')
+        .attr('r', 2.5).attr('fill', o.d.threat ? '#ff9bad' : '#ffffff').attr('opacity', 0).node();
+      stFlatParticles.push({ pathEl, totalLength, t: i / nParts, speed, orgColor, dotEl });
+    }
+  });
+  stStartFlatAnim();
 }
 
 function stStartSpin() {
