@@ -11,13 +11,6 @@ function resize() {
     simulation.force('y-split',  d3.forceY(d => d.type === 'org' ? height * 0.22 : height * 0.72).strength(d => d.type === 'org' ? 0.15 : 0.06));
     simulation.alpha(0.3).restart();
   }
-  // Re-compute projection if the map is currently shown
-  if (mapMode && worldGeo) {
-    stopMapAnim();
-    renderWorldMap();
-    updateMapDots();
-    startMapAnim();
-  }
   if (statsMode) updateStats();
 }
 window.addEventListener('resize', resize);
@@ -287,7 +280,6 @@ function drawNodes() {
       selectedIp = selectedMac ? (selNode?.client?.ip || null) : null;
       updateSideHighlight();
       applyGraphFilter();
-      if (mapMode) updateMapDots();
       if (statsMode) updateStats();
       updateConnPanel(selectedIp);
       if (logMode) updateLogView();
@@ -463,8 +455,7 @@ function updateSidePanel(clients, data, meshNodes, mainMac) {
         selectedIp = selectedMac ? c.ip : null;
         updateSideHighlight();
         applyGraphFilter();
-        if (mapMode) updateMapDots();
-        if (statsMode) updateStats();
+          if (statsMode) updateStats();
         updateConnPanel(selectedMac ? c.ip : null);
         if (logMode) updateLogView();
         if (devicesMode) {

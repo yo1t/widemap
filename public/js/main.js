@@ -84,10 +84,8 @@ socket.on('connections-update', data => {
   } else {
     updateOrgGraph();
   }
-  if (mapMode) updateMapDots();
   if (statsMode) updateStats();
   if (logMode) updateLogView();
-  if (dashMode) updateDashboard();
   // Immediately update the panel for the currently selected device
   const selNode = nodes.find(n => n.id === selectedMac);
   const selIp   = selNode?.client?.ip || null;
@@ -110,10 +108,8 @@ socket.on('connections-update', data => {
         dataRangeFrom = from24h;
         if (!asusActive) buildGraphFromConnections(); else updateOrgGraph();
         scheduleGraphAutoFit({ delayedData: true });
-        if (mapMode) updateMapDots();
         if (statsMode) updateStats();
         if (logMode) updateLogView();
-        if (dashMode) updateDashboard();
       })
       .catch(e => console.warn('[connections] background 24h fetch failed:', e));
   }

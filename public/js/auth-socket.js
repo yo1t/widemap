@@ -344,13 +344,9 @@ document.getElementById('general-save-btn').addEventListener('click', async () =
       }
       showStatus('general-status', t('settings.status.saved'), true);
       document.getElementById('s-retention').dataset.saved = String(newRetention);
-      // Re-render map if shown
-      if (mapMode && worldGeo) { stopMapAnim(); renderWorldMap(); updateMapDots(); startMapAnim(); }
-      // Reset stats/dashboard maps so they rebuild with new rotation on next visit
+      // Reset stats maps so they rebuild with new rotation on next visit
       if (typeof stFlatSvg !== 'undefined') { stFlatSvg = null; stGlobeSvg = null; stGlobeRotate = null; }
-      if (typeof dashGlobeRotate !== 'undefined') dashGlobeRotate = null;
       if (statsMode && worldGeo) initStatsMaps(true);
-      if (dashMode  && worldGeo) initDashboard();
     } else {
       showStatus('general-status', t('settings.status.saveFailed'), false);
     }

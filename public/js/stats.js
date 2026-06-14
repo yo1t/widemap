@@ -336,7 +336,7 @@ function stInitControls() {
 
 function initStatsMaps(resetRotation) {
   if (resetRotation) stGlobeRotate = null; // force re-center on home country
-  dashEnsureGeo(() => {
+  ensureWorldGeo(() => {
     if (!stRenderGlobeBase()) { requestAnimationFrame(initStatsMaps); return; }
     stRenderFlatBase();
     stRenderGlobeData();
