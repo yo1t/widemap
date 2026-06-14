@@ -6,7 +6,7 @@
 
 var dashGlobeSvg = null, dashGlobeProj = null;
 var dashFlatSvg = null, dashFlatProj = null, dashFlatPath = null;
-var dashGlobeRotate = [-139, -20];
+var dashGlobeRotate = null; // initialised lazily from home country
 var dashSpin = true, dashSpinTimer = null, dashSpinResume = null;
 var dashColorScale = null;
 
@@ -40,6 +40,10 @@ function dashRenderGlobeBase() {
     <filter id="dg-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <filter id="dg-glowS" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
 
+  if (!dashGlobeRotate) {
+    const home = getHomeCoord();
+    dashGlobeRotate = [-home.lon, -home.lat * 0.4];
+  }
   dashGlobeProj = d3.geoOrthographic()
     .fitSize([Math.min(w, h) - 16, Math.min(w, h) - 16], { type: 'Sphere' })
     .translate([w / 2, h / 2]).rotate(dashGlobeRotate);

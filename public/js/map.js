@@ -23,9 +23,29 @@ const COUNTRY_COORDS = {
 function getHomeCoord() {
   return COUNTRY_COORDS[homeCountry] || COUNTRY_COORDS['JP'];
 }
-// Japan → centred on Japan; otherwise → centred on Greenwich
+// Returns D3 rotation [λ, 0] so longitude -λ is at the map centre.
+// Each entry uses the conventional "home" view for that region.
 function getMapRotation() {
-  return homeCountry === 'JP' ? [-140, 0] : [0, 0];
+  const R = {
+    // East Asia / Pacific-centred (140°E): Japan is near-centre, Pacific visible
+    JP:[-140,0], KR:[-140,0], TW:[-140,0], HK:[-120,0], SG:[-115,0],
+    // Oceania (150°E): Australia/NZ centred with Pacific to the right
+    AU:[-150,0], NZ:[-170,0],
+    // China (110°E)
+    CN:[-110,0],
+    // South Asia (80°E): Indian Ocean centred
+    IN:[-80,0],
+    // Russia (60°E): spans Eurasia, Siberia visible
+    RU:[-60,0],
+    // Europe / GMT (10°E): classic atlas view, Americas on left, Asia on right
+    GB:[-10,0], DE:[-10,0], FR:[-10,0], IT:[-10,0], ES:[-10,0],
+    NL:[-10,0], SE:[-10,0], CH:[-10,0], NO:[-10,0],
+    // North America (95°W)
+    US:[95,0], CA:[95,0],
+    // South America (55°W)
+    BR:[55,0],
+  };
+  return R[homeCountry] || [-10, 0]; // default: Europe/GMT view
 }
 
 const mapTooltipEl = document.getElementById('map-tooltip');

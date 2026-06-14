@@ -4,7 +4,7 @@ const STATS_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4
 // ── Stats page: Globe + Flat map ─────────────────────────────────────────────
 var stGlobeSvg = null, stGlobeProj = null;
 var stFlatSvg = null, stFlatProj = null, stFlatPath = null;
-var stGlobeRotate = [-139, -20];
+var stGlobeRotate = null; // initialised lazily from home country
 var stColorScale = null;
 var stSpin = true, stSpinTimer = null, stSpinResume = null;
 var stFlatParticles = [], stFlatAnimId = null;
@@ -30,6 +30,10 @@ function stRenderGlobeBase() {
     </radialGradient>
     <filter id="sg-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
     <filter id="sg-glowS" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+  if (!stGlobeRotate) {
+    const home = getHomeCoord();
+    stGlobeRotate = [-home.lon, -home.lat * 0.4];
+  }
   stGlobeProj = d3.geoOrthographic()
     .fitSize([Math.min(w, h) - 16, Math.min(w, h) - 16], { type: 'Sphere' })
     .translate([w / 2, h / 2]).rotate(stGlobeRotate);
@@ -233,7 +237,8 @@ function stStopSpin() {
   if (stSpinTimer) { stSpinTimer.stop(); stSpinTimer = null; }
 }
 
-function initStatsMaps() {
+function initStatsMaps(resetRotation) {
+  if (resetRotation) stGlobeRotate = null; // force re-center on home country
   dashEnsureGeo(() => {
     if (!stRenderGlobeBase()) { requestAnimationFrame(initStatsMaps); return; }
     stRenderFlatBase();
