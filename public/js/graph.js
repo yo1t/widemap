@@ -71,7 +71,7 @@ document.getElementById('zoom-fit').addEventListener('click', () => fitGraphToNo
 
 let graphAutoFitTimers = [];
 
-function fitGraphToNodes({ duration = 400, padding = 96 } = {}) {
+function fitGraphToNodes({ duration = 400, padding = 96, maxScale = 2.4 } = {}) {
   if (!nodes || !nodes.length) return;
   const xs = nodes.map(n => n.x).filter(Number.isFinite);
   const ys = nodes.map(n => n.y).filter(Number.isFinite);
@@ -83,7 +83,7 @@ function fitGraphToNodes({ duration = 400, padding = 96 } = {}) {
   const sw = svg.node().clientWidth  || width;
   const sh = svg.node().clientHeight || height;
   if (!sw || !sh) return;
-  const k = Math.min(0.95, (sw - padding) / wBox, (sh - padding) / hBox, 3);
+  const k = Math.min(maxScale, (sw - padding) / wBox, (sh - padding) / hBox);
   const kk = Math.max(0.1, k);
   const tx = sw / 2 - (xMin + wBox / 2) * kk;
   const ty = sh / 2 - (yMin + hBox / 2) * kk;
@@ -104,7 +104,7 @@ function scheduleGraphAutoFit({ delayedData = false } = {}) {
   const delays = delayedData ? [160, 520, 1200, 2400, 4200] : [120, 360, 820];
   delays.forEach((delay, i) => {
     graphAutoFitTimers.push(setTimeout(() => {
-      fitGraphToNodes({ duration: i === 0 ? 280 : 560, padding: 112 });
+      fitGraphToNodes({ duration: i === 0 ? 280 : 560, padding: 112, maxScale: 2.4 });
     }, delay));
   });
 }
@@ -134,7 +134,7 @@ function flagEmoji(code) {
 
 function meshNodeId(mac) { return `__node_${mac}__`; }
 
-function buildGraph(data) {
+function buildGraph(data, { resetPositions = false } = {}) {
   const clients = data.clients || [];
   lastClients = clients;
   const meshNodes = data.meshNodes || [];
@@ -178,7 +178,7 @@ function buildGraph(data) {
   ];
 
   // Stash org nodes/links before rebuilding (to preserve positions)
-  const savedOrgNodes = nodes.filter(n => n.type === 'org');
+  const savedOrgNodes = resetPositions ? [] : nodes.filter(n => n.type === 'org');
   const newNodeIds = new Set(newNodes.map(n => n.id));
   const savedOrgLinks = links
     .filter(l => l.ltype === 'dev-org')
@@ -190,7 +190,7 @@ function buildGraph(data) {
     .filter(l => newNodeIds.has(l.source));
 
   const posMap = {};
-  nodes.forEach(n => posMap[n.id] = { x: n.x, y: n.y, vx: n.vx, vy: n.vy });
+  if (!resetPositions) nodes.forEach(n => posMap[n.id] = { x: n.x, y: n.y, vx: n.vx, vy: n.vy });
   nodes = [...newNodes.map(n => posMap[n.id] ? { ...n, ...posMap[n.id] } : n), ...savedOrgNodes];
   links = [...newLinks, ...savedOrgLinks];
 
@@ -648,7 +648,7 @@ function updateHeader(data) {
 }
 
 // Yamaha-only mode: build the graph treating src IPs as clients
-function buildGraphFromConnections() {
+function buildGraphFromConnections({ resetPositions = false } = {}) {
   // Do not early-return: still call buildGraph with empty arrays to clear the graph
   const filtered = getFilteredConnections();
   const srcCounts    = new Map();
@@ -678,16 +678,18 @@ function buildGraphFromConnections() {
   buildGraph({
     clients: syntheticClients, satellites: [], meshNodes: [],
     wanRx: 0, wanTx: 0, routerIp: null, timestamp: Date.now(),
-  });
-  updateOrgGraph();
+  }, { resetPositions });
+  updateOrgGraph({ resetPositions });
 }
 
-function updateOrgGraph() {
+function updateOrgGraph({ resetPositions = false } = {}) {
   if (!simulation) return; // skip if simulation not yet initialised
 
   // Stash existing org nodes/links (preserve positions) then remove them
   const orgPosMap = {};
-  nodes.forEach(n => { if (n.type === 'org') orgPosMap[n.id] = { x: n.x, y: n.y, vx: n.vx||0, vy: n.vy||0 }; });
+  if (!resetPositions) {
+    nodes.forEach(n => { if (n.type === 'org') orgPosMap[n.id] = { x: n.x, y: n.y, vx: n.vx||0, vy: n.vy||0 }; });
+  }
   nodes = nodes.filter(n => n.type !== 'org');
   links = links.filter(l => l.ltype !== 'dev-org');
 

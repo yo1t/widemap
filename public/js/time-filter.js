@@ -25,8 +25,8 @@ async function applyTimeFilter() {
   if (needsFetch) {
     await fetchConnectionRange(from, to);
   }
-  if (asusActive) updateOrgGraph();
-  else            buildGraphFromConnections();
+  if (asusActive) updateOrgGraph({ resetPositions: true });
+  else            buildGraphFromConnections({ resetPositions: true });
   scheduleGraphAutoFit({ delayedData });
   if (mapMode)    updateMapDots();
   if (statsMode)  updateStats();
