@@ -44,7 +44,7 @@ Widemap answers the question most home users can't ask: *what is each device on 
 
 ## Demo
 
-[Demo video](docs/widemap-redacted.mp4)
+https://github.com/user-attachments/assets/8682ec5f-1632-400f-b31b-d371f6b1b237
 
 > UI language: English / Japanese selectable
 
