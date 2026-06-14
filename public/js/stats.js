@@ -1,5 +1,167 @@
 // ─── Statistics view ─────────────────────────────────────────────────────────
 const STATS_COLORS = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#84cc16','#f97316','#a78bfa'];
+
+// ── Stats page: Globe + Flat map ─────────────────────────────────────────────
+var stGlobeSvg = null, stGlobeProj = null;
+var stFlatSvg = null, stFlatProj = null, stFlatPath = null;
+var stGlobeRotate = [-139, -20];
+var stColorScale = null;
+
+function stColor(d) {
+  return d.threat ? '#ff2d55' : (stColorScale ? stColorScale(d.totalSessions) : '#9333ea');
+}
+
+function stRenderGlobeBase() {
+  const cell = document.getElementById('st-globe');
+  if (!cell) return false;
+  const w = cell.clientWidth, h = cell.clientHeight;
+  if (!w || !h) return false;
+  stGlobeSvg = d3.select('#st-globe-svg').attr('viewBox', `0 0 ${w} ${h}`);
+  stGlobeSvg.selectAll('*').remove();
+  stGlobeSvg.append('defs').html(`
+    <radialGradient id="sg-ocean" cx="42%" cy="38%" r="70%">
+      <stop offset="0" stop-color="#0e2548"/><stop offset="60%" stop-color="#091530"/><stop offset="100%" stop-color="#04070f"/>
+    </radialGradient>
+    <radialGradient id="sg-atmo" cx="50%" cy="50%" r="50%">
+      <stop offset="84%" stop-color="#38bdf8" stop-opacity="0"/><stop offset="98%" stop-color="#38bdf8" stop-opacity="0.4"/><stop offset="100%" stop-color="#38bdf8" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="sg-glow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="sg-glowS" x="-90%" y="-90%" width="280%" height="280%"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+  stGlobeProj = d3.geoOrthographic()
+    .fitSize([Math.min(w, h) - 16, Math.min(w, h) - 16], { type: 'Sphere' })
+    .translate([w / 2, h / 2]).rotate(stGlobeRotate);
+  const R = stGlobeProj.scale();
+  stGlobeSvg.append('circle').attr('cx', w/2).attr('cy', h/2).attr('r', R+6).attr('fill', 'url(#sg-atmo)');
+  stGlobeSvg.append('path').attr('class', 'sg-ocean').datum({type:'Sphere'}).attr('fill', 'url(#sg-ocean)');
+  stGlobeSvg.append('path').attr('class', 'sg-grat').datum(d3.geoGraticule()()).attr('fill','none').attr('stroke','#2dd4bf').attr('stroke-width',0.25).attr('stroke-opacity',0.13);
+  stGlobeSvg.append('g').attr('class','sg-countries').attr('filter','url(#sg-glow)')
+    .selectAll('path').data(worldGeo.features).join('path')
+    .attr('fill','#0c2036').attr('fill-opacity',0.5).attr('stroke','#38bdf8').attr('stroke-width',0.5).attr('stroke-opacity',0.8);
+  stGlobeSvg.append('path').attr('class','sg-rim').datum({type:'Sphere'}).attr('fill','none').attr('stroke','#38bdf8').attr('stroke-width',0.9).attr('stroke-opacity',0.5).attr('filter','url(#sg-glow)');
+  stGlobeSvg.append('g').attr('class','sg-back').attr('filter','url(#sg-glow)');
+  stGlobeSvg.append('g').attr('class','sg-arcs').attr('filter','url(#sg-glow)');
+  stGlobeSvg.append('g').attr('class','sg-front').attr('filter','url(#sg-glow)');
+  stGlobeSvg.append('g').attr('class','sg-pulses');
+  stGlobeSvg.call(d3.drag()
+    .on('drag', ev => {
+      stGlobeRotate[0] += ev.dx * 0.4;
+      stGlobeRotate[1] = Math.max(-90, Math.min(90, stGlobeRotate[1] - ev.dy * 0.4));
+      stGlobeProj.rotate(stGlobeRotate);
+      stRenderGlobeData();
+    }));
+  return true;
+}
+
+function stRenderGlobeData() {
+  if (!stGlobeSvg || !stGlobeProj) return;
+  const p = d3.geoPath(stGlobeProj);
+  stGlobeSvg.selectAll('.sg-ocean,.sg-grat,.sg-rim').attr('d', p);
+  stGlobeSvg.select('.sg-countries').selectAll('path').attr('d', p);
+  const home = getHomeCoord();
+  const HLL = [home.lon, home.lat];
+  const rot = stGlobeProj.rotate();
+  const center = [-rot[0], -rot[1]];
+  const near = ll => d3.geoDistance(ll, center) < Math.PI / 2 - 0.02;
+  const pts = buildMapPoints();
+  const maxS = Math.max(2, ...pts.map(d => d.totalSessions));
+  stColorScale = d3.scaleSequentialLog().domain([1, maxS]).interpolator(d3.interpolate('#6d28d9', '#f97316'));
+  const rScale = d => 2 + Math.sqrt(d.totalSessions / maxS) * 5;
+  const items = pts.map(d => ({ d, n: near([d.lon, d.lat]), xy: stGlobeProj([d.lon, d.lat]) }));
+  const hN = near(HLL), hxy = stGlobeProj(HLL);
+  stGlobeSvg.select('.sg-arcs').selectAll('path').data(items).join('path')
+    .attr('d', o => p({type:'LineString', coordinates:[HLL,[o.d.lon,o.d.lat]]}))
+    .attr('fill','none').attr('stroke', o => stColor(o.d))
+    .attr('stroke-width', o => o.d.threat ? 1.5 : 1).attr('stroke-linecap','round')
+    .attr('stroke-opacity', o => o.n ? (o.d.threat ? 0.95 : 0.6) : 0.13);
+  stGlobeSvg.select('.sg-back').selectAll('circle').data(items.filter(o => !o.n)).join('circle')
+    .attr('cx', o => o.xy[0]).attr('cy', o => o.xy[1]).attr('r', o => rScale(o.d))
+    .attr('fill', o => stColor(o.d)).attr('fill-opacity', 0.2);
+  stGlobeSvg.select('.sg-front').selectAll('circle').data(items.filter(o => o.n)).join('circle')
+    .attr('cx', o => o.xy[0]).attr('cy', o => o.xy[1]).attr('r', o => rScale(o.d))
+    .attr('fill', o => stColor(o.d)).attr('fill-opacity', 0.95)
+    .attr('filter', o => o.d.threat ? 'url(#sg-glowS)' : null);
+  const pulses = stGlobeSvg.select('.sg-pulses');
+  pulses.selectAll('*').remove();
+  pulses.append('circle').attr('cx', hxy[0]).attr('cy', hxy[1]).attr('r', 4)
+    .attr('fill','#ffe9a6').attr('fill-opacity', hN ? 1 : 0.25).attr('filter','url(#sg-glow)');
+  items.filter(o => o.d.threat && o.n).forEach(o => {
+    const ring = pulses.append('circle').attr('cx',o.xy[0]).attr('cy',o.xy[1]).attr('r',5)
+      .attr('fill','none').attr('stroke','#ff2d55').attr('stroke-width',1.8);
+    ring.append('animate').attr('attributeName','r').attr('values','5;20').attr('dur','1.4s').attr('repeatCount','indefinite');
+    ring.append('animate').attr('attributeName','stroke-opacity').attr('values','0.9;0').attr('dur','1.4s').attr('repeatCount','indefinite');
+  });
+}
+
+function stRenderFlatBase() {
+  const cell = document.getElementById('st-flat');
+  if (!cell) return false;
+  const w = cell.clientWidth, h = cell.clientHeight;
+  if (!w || !h) return false;
+  stFlatSvg = d3.select('#st-flat-svg').attr('viewBox', `0 0 ${w} ${h}`);
+  stFlatSvg.selectAll('*').remove();
+  stFlatSvg.append('defs').html(`
+    <radialGradient id="sf-ocean" cx="48%" cy="42%" r="80%"><stop offset="0" stop-color="#10254a"/><stop offset="55%" stop-color="#0a1730"/><stop offset="100%" stop-color="#050a14"/></radialGradient>
+    <filter id="sf-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
+  stFlatProj = d3.geoNaturalEarth1().rotate(getMapRotation()).fitSize([w, h], worldGeo);
+  stFlatPath = d3.geoPath(stFlatProj);
+  stFlatSvg.append('path').datum({type:'Sphere'}).attr('fill','url(#sf-ocean)').attr('d', stFlatPath);
+  stFlatSvg.append('path').datum(d3.geoGraticule()()).attr('fill','none').attr('stroke','#2dd4bf').attr('stroke-width',0.3).attr('stroke-opacity',0.2).attr('d', stFlatPath);
+  stFlatSvg.append('g').attr('filter','url(#sf-glow)').selectAll('path').data(worldGeo.features).join('path')
+    .attr('fill','#0c2036').attr('stroke','#38bdf8').attr('stroke-width',0.5).attr('stroke-opacity',0.85).attr('d', stFlatPath);
+  stFlatSvg.append('g').attr('class','sf-arcs').attr('filter','url(#sf-glow)');
+  stFlatSvg.append('g').attr('class','sf-dots').attr('filter','url(#sf-glow)');
+  stFlatSvg.append('g').attr('class','sf-pulses');
+  return true;
+}
+
+function stRenderFlatData() {
+  if (!stFlatSvg || !stFlatProj) return;
+  const home = getHomeCoord();
+  const hxy = stFlatProj([home.lon, home.lat]);
+  const pts = buildMapPoints();
+  const maxS = Math.max(2, ...pts.map(d => d.totalSessions));
+  const rScale = d => 2.5 + Math.sqrt(d.totalSessions / maxS) * 6;
+  const arc = (a, b) => { const mx=(a[0]+b[0])/2, my=(a[1]+b[1])/2, lf=Math.min(Math.hypot(b[0]-a[0],b[1]-a[1])*0.3,80); return `M${a[0]},${a[1]} Q${mx},${my-lf} ${b[0]},${b[1]}`; };
+  const items = pts.map(d => ({ d, xy: stFlatProj([d.lon, d.lat]) || [-100,-100] }));
+  stFlatSvg.select('.sf-arcs').selectAll('path').data(items).join('path')
+    .attr('d', o => arc(hxy, o.xy)).attr('fill','none').attr('stroke', o => stColor(o.d))
+    .attr('stroke-width', o => o.d.threat ? 1.6 : 1).attr('stroke-linecap','round')
+    .attr('stroke-opacity', o => o.d.threat ? 0.9 : 0.5);
+  stFlatSvg.select('.sf-dots').selectAll('circle').data(items).join('circle')
+    .attr('cx', o => o.xy[0]).attr('cy', o => o.xy[1]).attr('r', o => rScale(o.d))
+    .attr('fill', o => stColor(o.d)).attr('fill-opacity', 0.9)
+    .attr('filter', o => o.d.threat ? 'url(#sf-glow)' : null);
+  const pulses = stFlatSvg.select('.sf-pulses');
+  pulses.selectAll('*').remove();
+  pulses.append('circle').attr('cx', hxy[0]).attr('cy', hxy[1]).attr('r', 4).attr('fill','#ffe9a6').attr('filter','url(#sf-glow)');
+  items.filter(o => o.d.threat).forEach(o => {
+    const ring = pulses.append('circle').attr('cx',o.xy[0]).attr('cy',o.xy[1]).attr('r',5).attr('fill','none').attr('stroke','#ff2d55').attr('stroke-width',1.8);
+    ring.append('animate').attr('attributeName','r').attr('values','5;22').attr('dur','1.4s').attr('repeatCount','indefinite');
+    ring.append('animate').attr('attributeName','stroke-opacity').attr('values','0.9;0').attr('dur','1.4s').attr('repeatCount','indefinite');
+  });
+}
+
+function initStatsMaps() {
+  dashEnsureGeo(() => {
+    if (!stRenderGlobeBase()) { requestAnimationFrame(initStatsMaps); return; }
+    stRenderFlatBase();
+    stRenderGlobeData();
+    stRenderFlatData();
+  });
+}
+
+function updateStatsMaps() {
+  if (!stGlobeSvg) { initStatsMaps(); return; }
+  stRenderGlobeData();
+  stRenderFlatData();
+}
+
+window.addEventListener('resize', () => {
+  if (typeof statsMode !== 'undefined' && statsMode && stGlobeSvg) {
+    stRenderGlobeBase(); stRenderFlatBase();
+    stRenderGlobeData(); stRenderFlatData();
+  }
+});
 let chartMode = 'stack'; // 'stack' | 'line'
 document.querySelectorAll('.chart-mode-btn').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -33,13 +195,12 @@ function updateStats() {
 
   if (!conns.length) {
     empty.style.display = 'block';
-    document.getElementById('stats-timeline').style.display = 'none';
-    document.getElementById('stats-bar').style.display = 'none';
+    document.getElementById('stats-charts').style.display = 'none';
+    updateStatsMaps();
     return;
   }
   empty.style.display = 'none';
-  document.getElementById('stats-timeline').style.display = 'flex';
-  document.getElementById('stats-bar').style.display = 'flex';
+  document.getElementById('stats-charts').style.display = 'grid';
 
   // ── Total sessions per destination ──────────────────────
   const isMobile = window.matchMedia('(max-width: 768px)').matches;
@@ -79,6 +240,7 @@ function updateStats() {
   }
 
   drawTimeline(series, fromT, toT, buckets, bw, topOrgs);
+  updateStatsMaps();
 }
 
 function drawTimeline(series, fromT, toT, buckets, bw, topOrgs) {
