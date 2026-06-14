@@ -109,9 +109,9 @@ PP1        203.0.113.10    up
   it('prefers LAN-like lines and ignores unrelated public IPs', () => {
     const output = `
 default via 203.0.113.1
-ip lan1 address 10.41.128.1/24
+ip lan1 address 192.168.100.1/24
 `;
-    assert.equal(parseLanIp(output), '10.41.128.1');
+    assert.equal(parseLanIp(output), '192.168.100.1');
   });
 });
 
