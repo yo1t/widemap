@@ -157,6 +157,43 @@ module.exports = function authRoutes(ctx) {
     }
   });
 
+  // ── Yamaha read-only auto-detection ────────────────────────────────────────
+  router.post('/yamaha/detect', requireAdmin, async (req, res) => {
+    const { yamahaIp: yIp, yamahaUser: yUser, yamahaPass: yPass, yamahaNat: yNat } = req.body || {};
+    if (yIp !== undefined && yIp !== '' && !isAllowedRouterIp(yIp)) {
+      return res.status(400).json({ code: 'routerIpPrivate', error: 'YamahaのIPがプライベート範囲外です' });
+    }
+    if (typeof yUser === 'string' && yUser.length > 64) return res.status(400).json({ error: 'ユーザー名が長すぎます' });
+    if (typeof yPass === 'string' && yPass.length > 256) return res.status(400).json({ error: 'パスワードが長すぎます' }); // pragma: allowlist secret
+
+    let stored = {};
+    try { stored = JSON.parse(fs.readFileSync(configFile, 'utf8')).yamaha || {}; } catch {}
+    const ip = yIp || yamaha.getIp() || stored.ip || '';
+    const user = yUser || yamaha.getUser() || stored.user || '';
+    const pass = yPass || stored.pass || '';
+    const natCandidates = [yNat, yamaha.getNat(), stored.nat].filter(Boolean);
+    if (!ip || !user || !pass) {
+      return res.status(400).json({ code: 'yamahaDetectMissing', error: 'YamahaのIP、ユーザー名、パスワードを入力してください' });
+    }
+
+    try {
+      const sameConfiguredRouter = yamaha.isReady() && ip === yamaha.getIp() && user === yamaha.getUser();
+      const result = sameConfiguredRouter
+        ? await yamaha.detectCurrentYamaha({ natCandidates })
+        : await yamaha.detectYamaha({
+            ip,
+            user,
+            pass,
+            expectedHostFp: yamaha.getHostFp() || stored.hostFp || '',
+            natCandidates,
+          });
+      res.json({ success: true, ...result });
+    } catch (err) {
+      logger.error('[auth] Yamaha auto-detect failed:', err.message);
+      res.status(502).json({ success: false, code: 'yamahaDetectFailed', error: 'Yamaha自動検出に失敗しました（IP・ユーザー名・パスワード・SSH設定を確認してください）' });
+    }
+  });
+
   // ── Login / setup ───────────────────────────────────────────────────────────
   router.post('/login', requireAdmin, async (req, res) => {
     const { username, password,

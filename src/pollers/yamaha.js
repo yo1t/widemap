@@ -12,6 +12,7 @@ let shellBuf      = '';
 let yamahaReconnectTimer = null;
 let yamahaConnecting = false;
 let shellResolve  = null;
+let execChain     = Promise.resolve();
 
 // Yamaha ARP table cache (IP -> MAC)
 const yamahaArpCache = new Map();
@@ -57,6 +58,244 @@ function parseNatDetail(text) {
   return sessions;
 }
 
+function parseNatDescriptorCandidates(text) {
+  const candidates = [];
+  const seen = new Set();
+  const add = value => {
+    const descriptor = String(value || '').trim();
+    if (!/^\d{1,6}$/.test(descriptor) || seen.has(descriptor)) return;
+    seen.add(descriptor);
+    candidates.push(descriptor);
+  };
+
+  for (const line of String(text || '').split('\n')) {
+    const descriptorLine = line.match(/\bnat\s+descriptor\b/i);
+    if (!descriptorLine) continue;
+    const explicit = line.match(/\bnat\s+descriptor\b[^\n]*?\b(\d{1,6})\b/i);
+    if (explicit) add(explicit[1]);
+  }
+
+  return candidates;
+}
+
+function parseLanIp(text) {
+  const privateIp = /\b(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b/g;
+  const skip = new Set(['0.0.0.0', '255.255.255.255']);
+  for (const line of String(text || '').split('\n')) {
+    if (!/\b(lan\d*|vlan\d*|br\d*|ip)\b/i.test(line)) continue;
+    let match;
+    while ((match = privateIp.exec(line)) !== null) {
+      if (match[1].endsWith('.0')) continue;
+      if (!skip.has(match[1])) return match[1];
+    }
+  }
+  return '';
+}
+
+function commandLooksOk(text) {
+  return !/(invalid command|command not found|error|エラー|入力エラー|該当する|not exist|not found)/i.test(String(text || ''));
+}
+
+function looksLikePagerPrompt(text) {
+  return /---|--\s*more\s*--|more\?|続け|次へ/i.test(String(text || ''));
+}
+
+function createTempYamahaShell({ ip, user, pass, expectedHostFp }) {
+  return new Promise((resolve, reject) => {
+    const conn = new SshClient();
+    let shell = null;
+    let buf = '';
+    let waiter = null;
+    let hostFp = '';
+    let settled = false;
+
+    const cleanup = () => {
+      if (waiter?.timer) clearTimeout(waiter.timer);
+      waiter = null;
+      try { if (shell) shell.removeAllListeners(); } catch {}
+      try { conn.removeAllListeners(); conn.end(); } catch {}
+    };
+    const fail = err => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    };
+    const waitForPromptLocal = (timeoutMs = 15000) => new Promise((res, rej) => {
+      if (/[>#]\s*$/.test(buf)) { res(buf); return; }
+      const timer = setTimeout(() => {
+        waiter = null;
+        rej(new Error('SSH timeout'));
+      }, timeoutMs);
+      waiter = { res, rej, timer };
+    });
+    const exec = async cmd => {
+      buf = '';
+      shell.write(cmd + '\n');
+      return waitForPromptLocal();
+    };
+
+    conn.on('ready', () => {
+      conn.shell({ term: 'vt100', cols: 220, rows: 500 }, async (err, stream) => {
+        if (err) return fail(err);
+        shell = stream;
+        stream.on('data', chunk => {
+          const text = chunk.toString('utf8').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
+          buf += text;
+          if (looksLikePagerPrompt(text)) stream.write('\n');
+          if (/[>#]\s*$/.test(buf) && waiter) {
+            const current = waiter;
+            waiter = null;
+            clearTimeout(current.timer);
+            current.res(buf);
+          }
+        });
+        stream.on('error', fail);
+        stream.on('close', () => {
+          if (!settled) fail(new Error('SSH shell closed'));
+        });
+        try {
+          await waitForPromptLocal(8000);
+          await exec('console lines 0');
+          settled = true;
+          resolve({ exec, close: cleanup, hostFp });
+        } catch (e) {
+          fail(e);
+        }
+      });
+    });
+    conn.on('error', fail);
+
+    const hostVerifier = hashedKey => {
+      hostFp = Buffer.isBuffer(hashedKey)
+        ? hashedKey.toString('hex')
+        : crypto.createHash('sha256').update(hashedKey).digest('hex');
+      if (expectedHostFp && hostFp !== expectedHostFp) return false;
+      return true;
+    };
+
+    conn.connect({
+      host: ip, port: 22,
+      username: user, password: pass,
+      readyTimeout: 15000,
+      keepaliveInterval: 10000,
+      keepaliveCountMax: 2,
+      hostHash: 'sha256',
+      hostVerifier,
+      algorithms: { kex: ['curve25519-sha256@libssh.org','ecdh-sha2-nistp256',
+                           'diffie-hellman-group14-sha256','diffie-hellman-group14-sha1'] },
+    });
+  });
+}
+
+async function detectYamaha({ ip, user, pass, expectedHostFp, natCandidates } = {}) {
+  if (!ip || !user || !pass) throw new Error('Yamaha IP, username, and password are required');
+  const shell = await createTempYamahaShell({ ip, user, pass, expectedHostFp });
+  try {
+    const routeRaw = await shell.exec('show ip route');
+    const interfaceRaw = await shell.exec('show ip interface brief');
+    const lanStatusRaw = await shell.exec('show status lan1');
+    const natRaw = await shell.exec('show nat descriptor');
+    const candidates = [
+      ...parseNatDescriptorCandidates(natRaw),
+      ...((natCandidates || []).map(String)),
+      '100', '1', '200', '1000',
+    ].filter((v, idx, arr) => /^\d{1,6}$/.test(v) && arr.indexOf(v) === idx);
+
+    let natDescriptorFound = '';
+    let natSessions = 0;
+    let natSessionsOk = false;
+    for (const candidate of candidates) {
+      const detailRaw = await shell.exec(`show nat descriptor address ${candidate} detail`);
+      const sessions = parseNatDetail(detailRaw);
+      const ok = commandLooksOk(detailRaw);
+      if (!natDescriptorFound && ok) natDescriptorFound = candidate;
+      if (ok && sessions.length > 0) {
+        natDescriptorFound = candidate;
+        natSessions = sessions.length;
+        natSessionsOk = true;
+        break;
+      }
+      if (ok) natSessionsOk = true;
+    }
+
+    return {
+      ssh: { ok: true },
+      nat: {
+        ok: !!natDescriptorFound,
+        descriptor: natDescriptorFound,
+        sessionsOk: natSessionsOk,
+        sessions: natSessions,
+        candidates,
+      },
+      lan: { ip: parseLanIp(interfaceRaw) || parseLanIp(lanStatusRaw) || parseLanIp(routeRaw) || '' },
+      suggested: {
+        yamahaIp: ip,
+        yamahaUser: user,
+        yamahaNat: natDescriptorFound || '100',
+      },
+      hostFp: shell.hostFp,
+    };
+  } finally {
+    shell.close();
+  }
+}
+
+async function collectYamahaDetection(exec, { ip, user, natCandidates } = {}) {
+  const routeRaw = await exec('show ip route');
+  const interfaceRaw = await exec('show ip interface brief');
+  const lanStatusRaw = await exec('show status lan1');
+  const natRaw = await exec('show nat descriptor');
+  const candidates = [
+    ...parseNatDescriptorCandidates(natRaw),
+    ...((natCandidates || []).map(String)),
+    '100', '1', '200', '1000',
+  ].filter((v, idx, arr) => /^\d{1,6}$/.test(v) && arr.indexOf(v) === idx);
+
+  let natDescriptorFound = '';
+  let natSessions = 0;
+  let natSessionsOk = false;
+  for (const candidate of candidates) {
+    const detailRaw = await exec(`show nat descriptor address ${candidate} detail`);
+    const sessions = parseNatDetail(detailRaw);
+    const ok = commandLooksOk(detailRaw);
+    if (!natDescriptorFound && ok) natDescriptorFound = candidate;
+    if (ok && sessions.length > 0) {
+      natDescriptorFound = candidate;
+      natSessions = sessions.length;
+      natSessionsOk = true;
+      break;
+    }
+    if (ok) natSessionsOk = true;
+  }
+
+  return {
+    ssh: { ok: true },
+    nat: {
+      ok: !!natDescriptorFound,
+      descriptor: natDescriptorFound,
+      sessionsOk: natSessionsOk,
+      sessions: natSessions,
+      candidates,
+    },
+    lan: { ip: parseLanIp(interfaceRaw) || parseLanIp(lanStatusRaw) || parseLanIp(routeRaw) || '' },
+    suggested: {
+      yamahaIp: ip,
+      yamahaUser: user,
+      yamahaNat: natDescriptorFound || '100',
+    },
+  };
+}
+
+async function detectCurrentYamaha({ natCandidates } = {}) {
+  if (!yamahaReady || !yamahaShell) throw new Error('Yamaha not connected');
+  return collectYamahaDetection(yamahaExec, {
+    ip: yamahaIp,
+    user: yamahaUser,
+    natCandidates: [natDescriptor, ...(natCandidates || [])],
+  });
+}
+
 function waitForPrompt(timeoutMs = 45000) {
   return new Promise((resolve, reject) => {
     if (shellBuf.endsWith('> ')) { resolve(shellBuf); return; }
@@ -66,11 +305,16 @@ function waitForPrompt(timeoutMs = 45000) {
 }
 
 async function yamahaExec(cmd) {
-  if (!yamahaReady || !yamahaShell) throw new Error('Yamaha not connected');
-  shellBuf = '';
-  yamahaShell.write(cmd + '\n');
-  await waitForPrompt();
-  return shellBuf;
+  const run = async () => {
+    if (!yamahaReady || !yamahaShell) throw new Error('Yamaha not connected');
+    shellBuf = '';
+    yamahaShell.write(cmd + '\n');
+    await waitForPrompt();
+    return shellBuf;
+  };
+  const result = execChain.then(run, run);
+  execChain = result.catch(() => {});
+  return result;
 }
 
 function scheduleYamahaReconnect(ms) {
@@ -115,7 +359,7 @@ function connectYamaha(onReady) {
       stream.on('data', chunk => {
         const text = chunk.toString('utf8').replace(/\x1b\[[0-9;]*[A-Za-z]/g, '');
         shellBuf += text;
-        if (text.includes('---')) stream.write(' ');
+        if (looksLikePagerPrompt(text)) stream.write('\n');
         if (shellBuf.endsWith('> ') && shellResolve) {
           const r = shellResolve;
           shellResolve = null;
@@ -286,6 +530,10 @@ module.exports = {
   reconnect,
   yamahaExec,
   parseNatDetail,
+  parseNatDescriptorCandidates,
+  parseLanIp,
+  detectYamaha,
+  detectCurrentYamaha,
   refreshYamahaArp,
   refreshYamahaNdp,
   fetchNatSessions,

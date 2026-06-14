@@ -8,7 +8,7 @@ const path = require('node:path');
 
 // Import from modules
 const { isAllowedRouterIp, htmlEscape } = require('../../src/utils');
-const { parseNatDetail } = require('../../src/pollers/yamaha');
+const { parseNatDetail, parseNatDescriptorCandidates, parseLanIp } = require('../../src/pollers/yamaha');
 const { parseClientList, computeRates, parseMeshNodes } = require('../../src/pollers/asus');
 const { parseOuiManuf, lookupAppleModel, inferVendorCategory } = require('../../src/device-identify');
 const { _parseLine: parseInspectLine } = require('../../src/pollers/inspect-syslog');
@@ -77,6 +77,41 @@ describe('parseNatDetail', () => {
 
   it('returns empty array for garbage input', () => {
     assert.deepEqual(parseNatDetail('some random text\nno valid lines'), []);
+  });
+});
+
+describe('parseNatDescriptorCandidates', () => {
+  it('extracts unique NAT descriptor numbers from Yamaha config-style output', () => {
+    const output = `
+nat descriptor type 100 masquerade
+nat descriptor address outer 100 primary
+nat descriptor masquerade static 100 1 192.168.1.10 tcp 443
+nat descriptor type 200 nat
+`;
+    assert.deepEqual(parseNatDescriptorCandidates(output), ['100', '200']);
+  });
+
+  it('returns an empty list when no NAT descriptor is present', () => {
+    assert.deepEqual(parseNatDescriptorCandidates('show status\nno descriptors here'), []);
+  });
+});
+
+describe('parseLanIp', () => {
+  it('extracts a private LAN IP from interface output', () => {
+    const output = `
+Interface  IP-Address      Status
+LAN1       192.168.50.1/24 up
+PP1        203.0.113.10    up
+`;
+    assert.equal(parseLanIp(output), '192.168.50.1');
+  });
+
+  it('prefers LAN-like lines and ignores unrelated public IPs', () => {
+    const output = `
+default via 203.0.113.1
+ip lan1 address 10.41.128.1/24
+`;
+    assert.equal(parseLanIp(output), '10.41.128.1');
   });
 });
 

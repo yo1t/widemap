@@ -95,6 +95,17 @@ The sidebar lists every device on your LAN, enriched with hostnames, vendor name
 
 ## Quick Start
 
+### Choose the shortest setup path
+
+Start with the smallest path that matches your network, then add sources later from Settings.
+
+| Pattern | Use this when | What to configure first |
+|---------|---------------|-------------------------|
+| Minimal: Yamaha RTX only | You want the fastest first run with no extra hardware | Yamaha IP, SSH username, SSH password, then **Connect & Auto-detect** |
+| Recommended: Yamaha RTX + ASUS AP | You also want WiFi client names, vendors, and MAC visibility | Minimal setup, then ASUS AP IP and admin login |
+| Detailed: + dnsmasq / INSPECT / DHCPD | You want richer hostnames, short-lived TCP sessions, and live IP-to-MAC mapping | Recommended setup, then enable Data Sources |
+| Notifications: + Slack | You want threat detections delivered by DM | Any setup above, then Slack notifications |
+
 ### Step 1 — Prerequisites checklist
 
 | | Requirement | Setup guide |
@@ -134,8 +145,9 @@ Open the Settings panel (⚙) and enter your router details:
 |-------|-----------------|
 | Yamaha RTX IP | Your router's LAN IP (e.g. `192.168.1.1`) |
 | SSH username / password | The login you set up in [Yamaha setup guide](docs/setup-yamaha.md) |
-| NAT descriptor number | Run `show nat descriptor` on the router — typically `100` |
 | ASUS AP IP / password | The AP's LAN IP and admin password ([ASUS setup guide](docs/setup-asus.md)) |
+
+For the Yamaha RTX, click **Connect & Auto-detect** after entering the IP, username, and password. Widemap checks SSH access, detects the NAT descriptor (usually `100`), finds the LAN IP when available, verifies that NAT sessions can be read, and fills the recommended setting before you save.
 
 Within a few seconds, devices and connections will start appearing on the map.
 

@@ -19,6 +19,7 @@ function getTimeRange() {
     case '12h':       return { from: now - 12 * 3600_000, to: null };
     case '24h':       return { from: now - 86400_000,     to: null };
     case '7d':        return { from: now - 604800_000,    to: null };
+    case '14d':       return { from: now - 14 * 86400_000, to: null };
     case 'today': {
       const d = new Date(now); d.setHours(0,0,0,0);
       return { from: d.getTime(), to: null };
@@ -28,8 +29,7 @@ function getTimeRange() {
       return { from: d.getTime() - 86400_000, to: d.getTime() };
     }
     case 'custom':    return { from: customRangeFrom, to: customRangeTo };
-    case 'all':       return { from: null, to: null };
-    default:          return { from: null, to: null };
+    default:          return { from: now - 3600_000, to: null };
   }
 }
 function getFilteredConnections() {

@@ -24,11 +24,16 @@ document.querySelectorAll('.settings-tab').forEach(tab => {
 });
 
 // Checkbox toggles enable/disable of input fields and updates the button label
+function connectButtonLabel(btnId, enabled) {
+  if (!enabled) return t('settings.btn.disable');
+  return btnId === 'yamaha-connect-btn' ? t('settings.yamaha.saveSuggested') : t('settings.btn.connect');
+}
+
 function toggleSection(inputsId, checkboxId, btnId) {
   const enabled = document.getElementById(checkboxId).checked;
   document.getElementById(inputsId).classList.toggle('disabled', !enabled);
   if (btnId) {
-    document.getElementById(btnId).textContent = enabled ? t('settings.btn.connect') : t('settings.btn.disable');
+    document.getElementById(btnId).textContent = connectButtonLabel(btnId, enabled);
   }
 }
 document.getElementById('enable-yamaha').addEventListener('change',
@@ -70,9 +75,71 @@ async function connectRouter(body, statusId, btnId, checkboxId) {
     return false;
   } finally {
     btn.disabled = false;
-    btn.textContent = enabled ? t('settings.btn.connect') : t('settings.btn.disable');
+    btn.textContent = connectButtonLabel(btnId, enabled);
   }
 }
+
+function renderYamahaDetectStatus(data, ok) {
+  const el = document.getElementById('yamaha-detect-status');
+  const natDescriptor = data?.nat?.descriptor || data?.suggested?.yamahaNat || '-';
+  const lanIp = data?.lan?.ip || '-';
+  const sessionsText = data?.nat?.sessionsOk
+    ? (data.nat.sessions > 0 ? `${data.nat.sessions} ${t('settings.yamaha.sessions')}` : t('settings.yamaha.sessionsOk'))
+    : t('settings.yamaha.sessionsFailed');
+  const lines = ok ? [
+    `${t('settings.yamaha.sshOk')}`,
+    `${t('settings.yamaha.natDetected')}: ${natDescriptor}`,
+    `${t('settings.yamaha.lanIp')}: ${lanIp}`,
+    `${t('settings.yamaha.natSessions')}: ${sessionsText}`,
+    `${t('settings.yamaha.suggestedReady')}`,
+  ] : [data?.code ? t('err.' + data.code) : (data?.error || t('settings.yamaha.detectFailed'))];
+  el.textContent = lines.join('\n');
+  el.className = 'settings-status ' + (ok ? 'ok' : 'err');
+  el.style.display = 'block';
+  el.style.whiteSpace = 'pre-line';
+}
+
+document.getElementById('yamaha-detect-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('yamaha-detect-btn');
+  const passEl = document.getElementById('s-yamaha-pass');
+  const hasSavedPass = passEl.dataset.saved === 'true';
+  const ip = document.getElementById('s-yamaha-ip').value.trim();
+  const user = document.getElementById('s-yamaha-user').value.trim();
+  const pass = passEl.value;
+  if (!ip) { showStatus('yamaha-detect-status', t('err.ipRequired'), false); return; }
+  if (!user) { showStatus('yamaha-detect-status', t('err.userRequired'), false); return; }
+  if (!pass && !hasSavedPass) { showStatus('yamaha-detect-status', t('err.passRequired'), false); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>' + t('settings.yamaha.detecting');
+  document.getElementById('yamaha-status').style.display = 'none';
+  try {
+    const body = {
+      yamahaIp: ip,
+      yamahaUser: user,
+      yamahaNat: document.getElementById('s-yamaha-nat').value.trim() || undefined,
+    };
+    if (pass) body.yamahaPass = pass;
+    const res = await apiFetch(_BASE+'/api/yamaha/detect', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      renderYamahaDetectStatus(data, false);
+      return;
+    }
+    if (data.suggested?.yamahaNat) document.getElementById('s-yamaha-nat').value = data.suggested.yamahaNat;
+    if (data.suggested?.yamahaIp) document.getElementById('s-yamaha-ip').value = data.suggested.yamahaIp;
+    if (data.suggested?.yamahaUser) document.getElementById('s-yamaha-user').value = data.suggested.yamahaUser;
+    renderYamahaDetectStatus(data, true);
+  } catch (err) {
+    renderYamahaDetectStatus({ error: t('err.serverGeneric') + err.message }, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('settings.yamaha.detect');
+  }
+});
 
 // Apply Yamaha settings (L3/L4 tab)
 document.getElementById('yamaha-connect-btn').addEventListener('click', async () => {

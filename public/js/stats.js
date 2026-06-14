@@ -8,6 +8,8 @@ var stGlobeRotate = null; // initialised lazily from home country
 var stColorScale = null;
 var stSpin = true, stSpinTimer = null, stSpinResume = null;
 var stFlatParticles = [], stFlatAnimId = null;
+var stFlatInitScale = null, stFlatInitTranslate = null;
+var stFlatZoom = 1, stFlatPanX = 0, stFlatPanY = 0;
 var stSelIp = null; // active device filter (null = all)
 const ST_SPEEDS = [0.04, 0.08, 0.16, 0.32, 0.64];
 var stSpeedIdx = 2; // default: ST_SPEEDS[2] = 0.16
@@ -138,10 +140,13 @@ function stRenderFlatBase() {
     <filter id="sf-glow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>`);
   stFlatSvg.append('defs').attr('id', 'sf-arc-grads');
   stFlatProj = d3.geoNaturalEarth1().rotate(getMapRotation()).fitSize([w, h], worldGeo);
+  stFlatInitScale = stFlatProj.scale();
+  stFlatInitTranslate = stFlatProj.translate().slice();
+  stFlatZoom = 1; stFlatPanX = 0; stFlatPanY = 0;
   stFlatPath = d3.geoPath(stFlatProj);
-  stFlatSvg.append('path').datum({type:'Sphere'}).attr('fill','url(#sf-ocean)').attr('d', stFlatPath);
-  stFlatSvg.append('path').datum(d3.geoGraticule()()).attr('fill','none').attr('stroke','#2dd4bf').attr('stroke-width',0.3).attr('stroke-opacity',0.2).attr('d', stFlatPath);
-  stFlatSvg.append('g').attr('filter','url(#sf-glow)').selectAll('path').data(worldGeo.features).join('path')
+  stFlatSvg.append('path').attr('class','sf-sphere').datum({type:'Sphere'}).attr('fill','url(#sf-ocean)').attr('d', stFlatPath);
+  stFlatSvg.append('path').attr('class','sf-grat').datum(d3.geoGraticule()()).attr('fill','none').attr('stroke','#2dd4bf').attr('stroke-width',0.3).attr('stroke-opacity',0.2).attr('d', stFlatPath);
+  stFlatSvg.append('g').attr('class','sf-world').attr('filter','url(#sf-glow)').selectAll('path').data(worldGeo.features).join('path')
     .attr('fill','#0c2036').attr('stroke','#38bdf8').attr('stroke-width',0.5).attr('stroke-opacity',0.85).attr('d', stFlatPath);
   stFlatSvg.append('g').attr('class','sf-arcs').attr('filter','url(#sf-glow)');
   stFlatSvg.append('g').attr('class','sf-particles');
@@ -223,6 +228,57 @@ function stRenderFlatData() {
   stStartFlatAnim();
 }
 
+function stUpdateFlatProj() {
+  if (!stFlatSvg || !stFlatProj || stFlatInitScale == null) return;
+  stFlatProj.scale(stFlatInitScale * stFlatZoom)
+    .translate([stFlatInitTranslate[0] + stFlatPanX, stFlatInitTranslate[1] + stFlatPanY]);
+  stFlatPath = d3.geoPath(stFlatProj);
+  stFlatSvg.select('.sf-sphere').attr('d', stFlatPath);
+  stFlatSvg.select('.sf-grat').attr('d', stFlatPath);
+  stFlatSvg.select('.sf-world').selectAll('path').attr('d', stFlatPath);
+  stRenderFlatData();
+}
+
+const SFM_PAN = 40, SFM_ZOOM_FACTOR = 1.3, SFM_MAX_ZOOM = 8, SFM_MIN_ZOOM = 0.4;
+
+function stInitFlatControls() {
+  const cell = document.getElementById('st-flat');
+  if (!cell || document.getElementById('st-flat-controls')) return;
+  const ctrl = document.createElement('div');
+  ctrl.id = 'st-flat-controls';
+  ctrl.className = 'flatmap-controls';
+  ctrl.innerHTML =
+    '<div class="fmc-zoom-row">' +
+      '<button class="fmc-btn" id="sfm-zoom-in" title="拡大">＋</button>' +
+      '<button class="fmc-btn" id="sfm-zoom-out" title="縮小">－</button>' +
+    '</div>' +
+    '<div class="fmc-dpad">' +
+      '<span></span>' +
+      '<button class="fmc-btn" id="sfm-up" title="上へ移動">↑</button>' +
+      '<span></span>' +
+      '<button class="fmc-btn" id="sfm-left" title="左へ移動">←</button>' +
+      '<button class="fmc-btn fmc-btn-reset" id="sfm-reset" title="リセット">⊙</button>' +
+      '<button class="fmc-btn" id="sfm-right" title="右へ移動">→</button>' +
+      '<span></span>' +
+      '<button class="fmc-btn" id="sfm-down" title="下へ移動">↓</button>' +
+      '<span></span>' +
+    '</div>';
+  cell.appendChild(ctrl);
+  document.getElementById('sfm-zoom-in').addEventListener('click', () => {
+    stFlatZoom = Math.min(SFM_MAX_ZOOM, stFlatZoom * SFM_ZOOM_FACTOR); stUpdateFlatProj();
+  });
+  document.getElementById('sfm-zoom-out').addEventListener('click', () => {
+    stFlatZoom = Math.max(SFM_MIN_ZOOM, stFlatZoom / SFM_ZOOM_FACTOR); stUpdateFlatProj();
+  });
+  document.getElementById('sfm-reset').addEventListener('click', () => {
+    stFlatZoom = 1; stFlatPanX = 0; stFlatPanY = 0; stUpdateFlatProj();
+  });
+  document.getElementById('sfm-up').addEventListener('click',    () => { stFlatPanY -= SFM_PAN; stUpdateFlatProj(); });
+  document.getElementById('sfm-down').addEventListener('click',  () => { stFlatPanY += SFM_PAN; stUpdateFlatProj(); });
+  document.getElementById('sfm-left').addEventListener('click',  () => { stFlatPanX -= SFM_PAN; stUpdateFlatProj(); });
+  document.getElementById('sfm-right').addEventListener('click', () => { stFlatPanX += SFM_PAN; stUpdateFlatProj(); });
+}
+
 function stStartSpin() {
   if (stSpinTimer) return;
   stSpinTimer = d3.timer(() => {
@@ -286,6 +342,7 @@ function initStatsMaps(resetRotation) {
     stRenderGlobeData();
     stRenderFlatData();
     stInitControls();
+    stInitFlatControls();
     stStartSpin();
   });
 }
@@ -295,6 +352,7 @@ function updateStatsMaps(selIp) {
   if (!stGlobeSvg) { initStatsMaps(); return; }
   stRenderGlobeData();
   stRenderFlatData();
+  stStartSpin();
 }
 
 window.addEventListener('resize', () => {
