@@ -548,7 +548,7 @@ function drawAppPieChart(conns) {
       d3.select(this).attr('d', arcH(d));
       const pct = ((d.data[1] / total) * 100).toFixed(1);
       tip.style('display', null)
-        .attr('x', cx).attr('y', topPad + 12)
+        .attr('x', cx).attr('y', cy - r - 12)
         .text(`${d.data[0]}: ${d.data[1]} (${pct}%)`);
     })
     .on('mouseleave', function(ev, d) {
@@ -558,10 +558,10 @@ function drawAppPieChart(conns) {
 
   // ── Center label ───────────────────────────────────────────
   g.append('text').attr('text-anchor', 'middle').attr('dy', '-0.2em')
-    .attr('fill', '#00e5ff').attr('font-size', Math.min(20, r * 0.34)).attr('font-weight', '600')
+    .attr('fill', '#00e5ff').attr('font-size', Math.min(14, r * 0.25)).attr('font-weight', '600')
     .attr('filter', 'url(#pglow)').text(total.toLocaleString());
   g.append('text').attr('text-anchor', 'middle').attr('dy', '1.15em')
-    .attr('fill', '#4a5568').attr('font-size', Math.min(9, r * 0.16))
+    .attr('fill', '#4a5568').attr('font-size', Math.min(8, r * 0.13))
     .text(t('stats.app.sessions'));
 
   // ── Legend (2 columns) ─────────────────────────────────────
