@@ -1,5 +1,5 @@
 // Integration test for Slack notifier — sends a real DM
-// Requires .widemap.json with: { "slack": { "token": "xoxb-...", "userId": "U..." } }
+// Requires .egressview.json with: { "slack": { "token": "xoxb-...", "userId": "U..." } }
 // Run: node --test test/integration/slack.test.js
 
 if (!process.env.RUN_INTEGRATION) {
@@ -14,7 +14,7 @@ const path = require('node:path');
 
 const notifier = require('../../src/notifier');
 
-const CONFIG_FILE = path.join(__dirname, '..', '..', '.widemap.json');
+const CONFIG_FILE = path.join(__dirname, '..', '..', '.egressview.json');
 
 function loadSlackConfig() {
   try {
@@ -31,13 +31,13 @@ describe('Slack integration', () => {
   before(() => {
     slackConfig = loadSlackConfig();
     if (!slackConfig.token || !slackConfig.userId) {
-      console.log('[slack integration] Skipping: no token/userId in .widemap.json');
+      console.log('[slack integration] Skipping: no token/userId in .egressview.json');
     }
   });
 
   it('sends a test DM successfully', async (t) => {
     if (!slackConfig.token || !slackConfig.userId) {
-      t.skip('slack.token and slack.userId required in .widemap.json');
+      t.skip('slack.token and slack.userId required in .egressview.json');
       return;
     }
     notifier.configure({
@@ -51,7 +51,7 @@ describe('Slack integration', () => {
 
   it('sends a threat notification DM', async (t) => {
     if (!slackConfig.token || !slackConfig.userId) {
-      t.skip('slack.token and slack.userId required in .widemap.json');
+      t.skip('slack.token and slack.userId required in .egressview.json');
       return;
     }
     notifier.configure({

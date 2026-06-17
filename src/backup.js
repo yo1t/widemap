@@ -6,8 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const DEFAULT_DB_PATH    = path.join(__dirname, '..', '.widemap.db');
-const DEFAULT_BACKUP_DIR = path.join(__dirname, '..', '.widemap-backups');
+const DEFAULT_DB_PATH    = path.join(__dirname, '..', '.egressview.db');
+const DEFAULT_BACKUP_DIR = path.join(__dirname, '..', '.egressview-backups');
 
 let DB_PATH    = DEFAULT_DB_PATH;
 let BACKUP_DIR = DEFAULT_BACKUP_DIR;
@@ -38,7 +38,7 @@ async function createBackup() {
   }
   ensureBackupDir();
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
-  const backupName = `widemap_${timestamp}.db`;
+  const backupName = `egressview_${timestamp}.db`;
   const backupPath = path.join(BACKUP_DIR, backupName);
   // Only clean up the target file on failure if WE created it — a backup
   // taken in the same second as a previous one shares the timestamped name,
@@ -80,7 +80,7 @@ function listBackups() {
   ensureBackupDir();
   try {
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.startsWith('widemap_') && f.endsWith('.db'))
+      .filter(f => f.startsWith('egressview_') && f.endsWith('.db'))
       .map(name => {
         const stat = fs.statSync(path.join(BACKUP_DIR, name));
         return { name, size: stat.size, created: stat.mtime.toISOString() };

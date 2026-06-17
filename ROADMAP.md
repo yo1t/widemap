@@ -1,14 +1,14 @@
-# Widemap Network Monitor Roadmap
+# EgressView Roadmap
 
 > 🇯🇵 [日本語版はこちら](ROADMAP.ja.md)
 
-For what Widemap Network Monitor does today, see the [README](README.md).
+For what EgressView does today, see the [README](README.md).
 
 ## 🚧 Planned
 
 ### conntrack router support (OpenWrt / ASUS router mode / Ubiquiti UDM)
 
-A shared parser for Linux `nf_conntrack` opens Widemap Network Monitor up to many Linux-based routers, including OpenWrt, ASUS router mode, and Ubiquiti UDM-class devices.
+A shared parser for Linux `nf_conntrack` opens EgressView up to many Linux-based routers, including OpenWrt, ASUS router mode, and Ubiquiti UDM-class devices.
 
 **🙋 Hardware testers wanted** — implementation can largely be done without hardware, but real-device validation cannot. If you run one of these routers, please [open an issue](https://github.com/yo1t/widemap/issues).
 

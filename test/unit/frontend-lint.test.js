@@ -75,7 +75,7 @@ describe('Frontend TDZ lint', () => {
 
   it('API fetches use apiFetch (not raw fetch with adminToken)', () => {
     // Raw fetch() with 'adminToken' key would use the wrong localStorage key
-    // (correct key is TOKEN_KEY = 'widemap_admin_token', accessed via apiFetch)
+    // (correct key is TOKEN_KEY = 'egressview_admin_token', accessed via apiFetch)
     const badLines = lines
       .map((line, i) => ({ line, num: i + 1 }))
       .filter(({ line }) => /localStorage\.getItem\(['"]adminToken['"]\)/.test(line));

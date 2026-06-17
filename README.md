@@ -1,8 +1,8 @@
-# Widemap Network Monitor
+# EgressView
 
 **Home / SOHO Network Security Monitor — Real-time visibility into every LAN device's outbound connections**
 
-Is your smart TV phoning home to unexpected servers? Are your IP cameras, IoT appliances, or NAS boxes making connections you never authorised? Widemap Network Monitor answers these questions by passively monitoring every outbound connection from every device on your LAN, then turning that data into an investigation workflow: Graph Map and Statistics for the big picture, Connection Log and Devices for drill-down analysis — with automatic threat detection.
+Is your smart TV phoning home to unexpected servers? Are your IP cameras, IoT appliances, or NAS boxes making connections you never authorised? EgressView answers these questions by passively monitoring every outbound connection from every device on your LAN, then turning that data into an investigation workflow: Graph Map and Statistics for the big picture, Connection Log and Devices for drill-down analysis — with automatic threat detection.
 
 No new hardware. No inline traffic interception. Works via your existing Yamaha RTX router's NAT session table.
 
@@ -17,7 +17,7 @@ No new hardware. No inline traffic interception. Works via your existing Yamaha 
 
 Modern home and SOHO networks run 20–40 devices: smart TVs, IP cameras, NAS drives, Wi-Fi speakers, printers, network switches, PCs, and smartphones. Many of these — especially IoT equipment — update infrequently and have unknown outbound behaviors. Any of them can be silently compromised and begin exfiltrating data or relaying traffic for a botnet.
 
-Widemap Network Monitor answers the question most home users can't ask: *what is each device on my network actually connecting to?*
+EgressView answers the question most home users can't ask: *what is each device on my network actually connecting to?*
 
 - **Passive, zero-impact monitoring** — reads the router's NAT session table over SSH; no inline tap, no throughput penalty, no latency added
 - **Per-device visibility** — every connection tagged to the source device (vendor, model, hostname) via OUI, mDNS, SSDP, and NetBIOS
@@ -65,7 +65,7 @@ Connection Log and Devices let you drill down into suspicious destinations, nois
 ```
 ┌─────────────────┐  SSH (NAT)  ┌──────────────────────┐
 │  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   Widemap Server     │  WebSocket
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
 │  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► Browser
 └─────────────────┘             │                      │
 ┌─────────────────┐  HTTP       │  Pollers:            │
@@ -131,7 +131,7 @@ On first startup, an initial **login password** is printed to the console:
 
 ```
 ══════════════════════════════════════════════════════════════
-  Widemap Network Monitor login password (initial):
+  EgressView login password (initial):
   KFpDqntYRfcr...
   → Log in with this password on first access
 ══════════════════════════════════════════════════════════════
@@ -149,7 +149,7 @@ Open the Settings panel (⚙) and enter your router details:
 | SSH username / password | The login you set up in [Yamaha setup guide](docs/setup-yamaha.md) |
 | ASUS AP IP / password | The AP's LAN IP and admin password ([ASUS setup guide](docs/setup-asus.md)) |
 
-For the Yamaha RTX, click **Connect & Auto-detect** after entering the IP, username, and password. Widemap Network Monitor checks SSH access, detects the NAT descriptor (usually `100`), finds the LAN IP when available, verifies that NAT sessions can be read, and fills the recommended setting before you save.
+For the Yamaha RTX, click **Connect & Auto-detect** after entering the IP, username, and password. EgressView checks SSH access, detects the NAT descriptor (usually `100`), finds the LAN IP when available, verifies that NAT sessions can be read, and fills the recommended setting before you save.
 
 Within a few seconds, devices, sessions, and statistics will start appearing in the UI.
 
@@ -186,13 +186,13 @@ npm start
 
 ## HTTPS (optional)
 
-By default Widemap Network Monitor serves plain HTTP. To enable HTTPS, add to `.widemap.json` and restart:
+By default EgressView serves plain HTTP. To enable HTTPS, add to `.widemap.json` and restart:
 
 ```json
 "https": { "enabled": true }
 ```
 
-A self-signed certificate (`.widemap-cert.pem` / `.widemap-key.pem`, 10-year validity) is generated automatically via the `openssl` CLI — your browser will show a one-time warning to accept it. To use your own certificate instead:
+A self-signed certificate (`.egressview-cert.pem` / `.egressview-key.pem`, 10-year validity) is generated automatically via the `openssl` CLI — your browser will show a one-time warning to accept it. To use your own certificate instead:
 
 ```json
 "https": { "enabled": true, "certPath": "/path/to/cert.pem", "keyPath": "/path/to/key.pem" }
@@ -214,7 +214,7 @@ All settings are stored in `.widemap.json` (auto-generated, gitignored). You can
 | `YAMAHA_PASS` | — | Yamaha SSH password |
 | `YAMAHA_NAT` | `100` | NAT descriptor number |
 | `SUBPATH` | — | Reverse proxy sub-path (e.g. `/widemap`) |
-| `WIDEMAP_DB` | `.widemap.db` | Path to the SQLite database file |
+| `EGRESSVIEW_DB` | `.widemap.db` | Path to the SQLite database file |
 | `LOG_LEVEL` | `info` | Log verbosity: `error` / `warn` / `info` / `debug` |
 
 ## Features
@@ -296,17 +296,17 @@ Any model with the standard web admin interface, used in AP mode or AiMesh:
 
 ## License
 
-Widemap Network Monitor is dual-licensed:
+EgressView is dual-licensed:
 
 - Open source license: [GNU Affero General Public License v3.0](LICENSE)
 - Commercial license: available separately for proprietary or closed-source use
 
-You may use, modify, and distribute Widemap Network Monitor under the AGPL-3.0. If you include Widemap Network Monitor or derivative works in a proprietary product, distribute it without source code, or provide a modified version as a network service, you must comply with the AGPL-3.0 source code obligations.
+You may use, modify, and distribute EgressView under the AGPL-3.0. If you include EgressView or derivative works in a proprietary product, distribute it without source code, or provide a modified version as a network service, you must comply with the AGPL-3.0 source code obligations.
 
-If you want to use Widemap Network Monitor in a proprietary or closed-source commercial product without releasing the corresponding source code under the AGPL-3.0, you must obtain a commercial license from the copyright holder.
+If you want to use EgressView in a proprietary or closed-source commercial product without releasing the corresponding source code under the AGPL-3.0, you must obtain a commercial license from the copyright holder.
 
 ```
-Widemap Network Monitor — Real-time network connection visualizer
+EgressView — Real-time network connection visualizer
 Copyright (C) 2025 Yoichi Takizawa
 
 Source code: https://github.com/yo1t/widemap

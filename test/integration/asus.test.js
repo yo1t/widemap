@@ -1,9 +1,9 @@
 // Integration tests for ASUS WiFi AP HTTP connection (requires real hardware)
 // Run: node --test test/integration/asus.test.js
-// Requires: .widemap.json with valid asus credentials
+// Requires: .egressview.json with valid asus credentials
 //
 // SECURITY NOTE:
-// - Credentials are read from .widemap.json (gitignored, 0600 permissions)
+// - Credentials are read from .egressview.json (gitignored, 0600 permissions)
 // - No credentials are logged or written to test output
 // - Test does not store session tokens beyond the test run
 
@@ -19,7 +19,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const axios = require('axios');
 
-const CONFIG_FILE = path.join(__dirname, '..', '..', '.widemap.json');
+const CONFIG_FILE = path.join(__dirname, '..', '..', '.egressview.json');
 
 // ─── Re-implement parseClientList (same as server.js) ───────────────────────
 function parseClientList(raw) {
@@ -47,11 +47,11 @@ function parseClientList(raw) {
 // ─── Load config ────────────────────────────────────────────────────────────
 function loadTestConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
-    throw new Error(`Config file not found: ${CONFIG_FILE} — integration tests require .widemap.json`);
+    throw new Error(`Config file not found: ${CONFIG_FILE} — integration tests require .egressview.json`);
   }
   const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
   if (!data.asus?.ip || !data.asus?.user || !data.asus?.pass) {
-    throw new Error('ASUS credentials not configured in .widemap.json');
+    throw new Error('ASUS credentials not configured in .egressview.json');
   }
   return data.asus;
 }

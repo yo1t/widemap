@@ -6,7 +6,7 @@ const logger = require('./logger');
 const fs   = require('fs');
 const path = require('path');
 
-const NOTES_FILE = path.join(__dirname, '..', '.widemap.notes.json');
+const NOTES_FILE = path.join(__dirname, '..', '.egressview.notes.json');
 
 // Allowed key: an IPv4 address, a MAC address, their combination separated by |,
 // OR a UUID (deviceId-based canonical key introduced in P1-5 step 8).

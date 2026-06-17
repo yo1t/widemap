@@ -280,7 +280,7 @@ async function loadNotifLog() {
   if (!nlMode) return;
   nlSetLoading(true);
   try {
-    const token = localStorage.getItem('widemap_admin_token') || '';
+    const token = localStorage.getItem('egressview_admin_token') || '';
     const res = await fetch(`${BASE_URL}/api/notification-log`, {
       headers: { 'X-Admin-Token': token },
     });

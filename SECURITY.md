@@ -14,17 +14,17 @@ You can expect an acknowledgment within a few days. Fixes are released on a best
 
 ## Supported versions
 
-Widemap Network Monitor ships from the `main` branch. Security fixes are applied to `main` only — please keep your installation up to date.
+EgressView ships from the `main` branch. Security fixes are applied to `main` only — please keep your installation up to date.
 
 ## Deployment model & scope
 
-Widemap Network Monitor is designed to run **inside your LAN** and monitors it passively:
+EgressView is designed to run **inside your LAN** and monitors it passively:
 
 - All API endpoints and the WebSocket are protected by an admin token (timing-safe comparison, brute-force delay).
 - Router credentials and the SQLite database stay on the host machine; nothing is sent to a cloud service. Threat-intelligence feeds are downloaded and matched locally.
 - Router IP inputs are restricted to private address ranges (SSRF protection).
 
-**Do not expose Widemap Network Monitor directly to the internet.** If you need remote access, put it behind a VPN or an authenticating reverse proxy. Reports that assume an internet-exposed deployment without such protection are still welcome, but will be triaged as lower severity.
+**Do not expose EgressView directly to the internet.** If you need remote access, put it behind a VPN or an authenticating reverse proxy. Reports that assume an internet-exposed deployment without such protection are still welcome, but will be triaged as lower severity.
 
 ## Out of scope
 

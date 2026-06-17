@@ -1,4 +1,4 @@
-# Contributing to Widemap Network Monitor
+# Contributing to EgressView
 
 Thank you for your interest in contributing! Issues and pull requests are welcome — in English or Japanese (日本語での issue / PR も歓迎です).
 
@@ -41,7 +41,7 @@ CI (GitHub Actions) runs the unit tests on Node 18 and 20, plus the release safe
 
 ## Router support contributions
 
-Widemap Network Monitor currently supports Yamaha RTX (NAT session polling via SSH). Support for conntrack-based routers (ASUS router mode, OpenWrt, Ubiquiti UDM) is planned — see [ROADMAP.md](ROADMAP.md). If you own one of these devices and can test against real hardware, that is one of the most valuable contributions you can make. Please open an issue to coordinate.
+EgressView currently supports Yamaha RTX (NAT session polling via SSH). Support for conntrack-based routers (ASUS router mode, OpenWrt, Ubiquiti UDM) is planned — see [ROADMAP.md](ROADMAP.md). If you own one of these devices and can test against real hardware, that is one of the most valuable contributions you can make. Please open an issue to coordinate.
 
 ## License
 

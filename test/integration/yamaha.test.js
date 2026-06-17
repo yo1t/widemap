@@ -1,9 +1,9 @@
 // Integration tests for Yamaha RTX SSH connection (requires real hardware)
 // Run: node --test test/integration/yamaha.test.js
-// Requires: .widemap.json with valid yamaha credentials
+// Requires: .egressview.json with valid yamaha credentials
 //
 // SECURITY NOTE:
-// - Credentials are read from .widemap.json (gitignored, 0600 permissions)
+// - Credentials are read from .egressview.json (gitignored, 0600 permissions)
 // - No credentials are logged or written to test output
 // - Baseline file contains only aggregate metrics (no IP addresses or session details)
 
@@ -18,7 +18,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Client } = require('ssh2');
 
-const CONFIG_FILE = path.join(__dirname, '..', '..', '.widemap.json');
+const CONFIG_FILE = path.join(__dirname, '..', '..', '.egressview.json');
 const BASELINE_FILE = path.join(__dirname, '..', 'fixtures', 'baseline.json');
 
 // ─── Re-implement parseNatDetail (same as server.js) ────────────────────────
@@ -41,11 +41,11 @@ function parseNatDetail(text) {
 // ─── Load config (credentials) ──────────────────────────────────────────────
 function loadTestConfig() {
   if (!fs.existsSync(CONFIG_FILE)) {
-    throw new Error(`Config file not found: ${CONFIG_FILE} — integration tests require .widemap.json`);
+    throw new Error(`Config file not found: ${CONFIG_FILE} — integration tests require .egressview.json`);
   }
   const data = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
   if (!data.yamaha?.ip || !data.yamaha?.user || !data.yamaha?.pass) {
-    throw new Error('Yamaha credentials not configured in .widemap.json');
+    throw new Error('Yamaha credentials not configured in .egressview.json');
   }
   return data.yamaha;
 }

@@ -222,7 +222,7 @@ describe('corrupt DB recovery', () => {
     try {
       // A good backup exists…
       fs.mkdirSync(backupDir, { recursive: true });
-      makeConnectionsDb(path.join(backupDir, 'widemap_2025-01-01_00-00-00.db'), '203.0.113.99');
+      makeConnectionsDb(path.join(backupDir, 'egressview_2025-01-01_00-00-00.db'), '203.0.113.99');
       backup._setPathsForTest(dbPath, backupDir);
 
       // …and the live DB file is garbage

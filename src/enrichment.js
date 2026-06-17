@@ -8,7 +8,7 @@ const dns = require('dns').promises;
 const Database = require('better-sqlite3');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', '.widemap.db');
+const DB_PATH = path.join(__dirname, '..', '.egressview.db');
 
 let db            = null;
 let _dbPath       = DB_PATH;

@@ -6,7 +6,7 @@ const Database = require('better-sqlite3');
 const path     = require('path');
 const crypto   = require('crypto');
 
-const DB_PATH = path.join(__dirname, '..', '.widemap.db');
+const DB_PATH = path.join(__dirname, '..', '.egressview.db');
 
 // Merge candidate thresholds
 const CANDIDATE_SCORE = 0.4;  // save for manual review

@@ -1,4 +1,4 @@
-// Smoke tests for Widemap Network Monitor — Phase 2 safety net
+// Smoke tests for EgressView — Phase 2 safety net
 //
 // Primary goal: catch JS load-order errors when index.html is refactored.
 // Secondary: verify extracted static assets are served correctly.
@@ -20,7 +20,7 @@ test('GET / returns 200 with correct title', async ({ page }) => {
   // 'commit' = response headers received; title is in <head> so available immediately
   const res = await page.goto('/', { waitUntil: 'commit' });
   expect(res.status()).toBe(200);
-  await expect(page).toHaveTitle('Widemap Network Monitor');
+  await expect(page).toHaveTitle('EgressView');
 });
 
 test('style.css is served (200, text/css)', async ({ request }) => {
@@ -106,7 +106,7 @@ test('no uncaught JS errors on page load', async ({ page }) => {
 // Helper: authenticate and navigate to /
 async function authPage(page) {
   await page.addInitScript(tok => {
-    localStorage.setItem('widemap_admin_token', tok);
+    localStorage.setItem('egressview_admin_token', tok);
   }, TOKEN);
   await page.goto('/');
   await page.waitForLoadState('networkidle');

@@ -1,7 +1,7 @@
 {
-  "name": "widemap",
+  "name": "egressview",
   "version": "1.0.0",
-  "description": "Widemap Network Monitor — Where Is Data Exiting? Map All Paths. Real-time visualisation of LAN devices and their internet destinations.",
+  "description": "EgressView — Where Is Data Exiting? Map All Paths. Real-time visualisation of LAN devices and their internet destinations.",
   "author": {
     "name": "yo1t",
     "url": "https://github.com/yo1t"

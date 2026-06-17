@@ -1,14 +1,14 @@
 #!/bin/bash
-# Widemap Network Monitor server control script
+# EgressView server control script
 # Usage: start.sh [start|stop|status]
 # On EC2, delegates to systemd. Locally, manages a PID file.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PID_FILE="$SCRIPT_DIR/.widemap.pid"
+PID_FILE="$SCRIPT_DIR/.egressview.pid"
 CMD="${1:-start}"
 
 # On EC2 with systemd service, delegate
-if systemctl list-units --type=service 2>/dev/null | grep -q 'widemap.service'; then
+if systemctl list-units --type=service 2>/dev/null | grep -q 'egressview.service'; then
   exec sudo systemctl "$CMD" widemap
 fi
 
@@ -16,7 +16,7 @@ fi
 case "$CMD" in
   start)
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-      echo "widemap is already running (PID $(cat "$PID_FILE"))"
+      echo "egressview is already running (PID $(cat "$PID_FILE"))"
       exit 0
     fi
     cd "$SCRIPT_DIR"
@@ -26,24 +26,24 @@ case "$CMD" in
       source .env
       set +o allexport
     fi
-    nohup node server.js >> /tmp/widemap.log 2>&1 &
+    nohup node server.js >> /tmp/egressview.log 2>&1 &
     echo $! > "$PID_FILE"
-    echo "widemap started (PID $!)"
+    echo "egressview started (PID $!)"
     ;;
   stop)
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
       kill "$(cat "$PID_FILE")" && rm -f "$PID_FILE"
-      echo "widemap stopped"
+      echo "egressview stopped"
     else
-      echo "widemap is not running"
+      echo "egressview is not running"
       rm -f "$PID_FILE"
     fi
     ;;
   status)
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-      echo "widemap is running (PID $(cat "$PID_FILE"))"
+      echo "egressview is running (PID $(cat "$PID_FILE"))"
     else
-      echo "widemap is not running"
+      echo "egressview is not running"
       exit 1
     fi
     ;;

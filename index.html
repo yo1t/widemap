@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Widemap Network Monitor — Home / SOHO Network Security Monitor</title>
+  <title>EgressView — Home / SOHO Network Security Monitor</title>
   <meta name="description" content="Where Is Data Exiting? Map All Paths. Passively monitor every LAN device's outbound connections. Use Graph Map and Statistics for whole-network overview, then drill down in Connection Log and Devices. Automatic C2/botnet threat detection, Slack alerts. Works with Yamaha RTX routers — no new hardware required.">
   <meta name="keywords" content="network security monitor, IoT security, home network security, SOHO security, Yamaha RTX, network visualizer, C2 detection, botnet detection, threat intelligence, LAN monitor, open source">
   <meta name="author" content="Yoichi Takizawa">
   <link rel="canonical" href="https://yo1t.github.io/widemap/">
-  <meta property="og:title" content="Widemap Network Monitor — Home / SOHO Network Security Monitor">
+  <meta property="og:title" content="EgressView — Home / SOHO Network Security Monitor">
   <meta property="og:description" content="Passively monitor every LAN device's outbound connections. Graph Map and Statistics provide the overview; Connection Log and Devices provide drill-down investigation. Automatic C2/botnet threat detection and Slack alerts — no new hardware required.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://yo1t.github.io/widemap/">
   <meta property="og:image" content="https://raw.githubusercontent.com/yo1t/widemap/main/docs/widemap1.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Widemap Network Monitor — Home / SOHO Network Security Monitor">
+  <meta name="twitter:title" content="EgressView — Home / SOHO Network Security Monitor">
   <meta name="twitter:description" content="Passively monitor every LAN device's outbound connections. Graph Map and Statistics provide the overview; Connection Log and Devices provide drill-down investigation. Automatic C2/botnet threat detection and Slack alerts — no new hardware required.">
   <meta name="twitter:image" content="https://raw.githubusercontent.com/yo1t/widemap/main/docs/widemap1.png">
   <style>
@@ -191,7 +191,7 @@
 </div>
 
 <header>
-  <h1><span>Widemap Network Monitor</span></h1>
+  <h1><span>EgressView</span></h1>
   <p>Where Is Data Exiting? Map All Paths. — Know what every device on your home or SOHO network is actually connecting to. Graph Map and Statistics for the overview; Connection Log and Devices for drill-down investigation. Automatic threat detection and Slack alerts.</p>
   <div class="badges">
     <a href="https://opensource.org/licenses/AGPL-3.0"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
@@ -215,7 +215,7 @@
 
 <main>
 
-  <!-- Why Widemap Network Monitor -->
+  <!-- Why EgressView -->
   <section id="why">
     <h2><span class="icon">🔒</span> For Home / SOHO Security</h2>
     <p style="font-size:0.95rem; color:var(--muted); margin-bottom:20px;">Modern home and SOHO networks run 20–40 devices — smart TVs, IP cameras, NAS drives, Wi-Fi speakers, IoT appliances, and more. Many of these devices have minimal security hygiene and unknown outbound behaviors. Any of them can be silently compromised.</p>
@@ -316,10 +316,10 @@
   <section id="screenshots">
     <h2><span class="icon">◈</span> Screenshots</h2>
     <div class="screenshot-grid">
-      <img src="docs/widemap1.png" alt="Widemap Network Monitor Graph Map overview for LAN devices and destinations" loading="lazy">
-      <img src="docs/widemap2.png" alt="Widemap Network Monitor Statistics view with connection history charts" loading="lazy">
-      <img src="docs/widemap3.png" alt="Widemap Network Monitor Connection Log drill-down workflow" loading="lazy">
-      <img src="docs/widemap4.png" alt="Widemap Network Monitor Devices drill-down workflow" loading="lazy">
+      <img src="docs/widemap1.png" alt="EgressView Graph Map overview for LAN devices and destinations" loading="lazy">
+      <img src="docs/widemap2.png" alt="EgressView Statistics view with connection history charts" loading="lazy">
+      <img src="docs/widemap3.png" alt="EgressView Connection Log drill-down workflow" loading="lazy">
+      <img src="docs/widemap4.png" alt="EgressView Devices drill-down workflow" loading="lazy">
     </div>
   </section>
 
@@ -329,7 +329,7 @@
     <div class="arch-block">
       <pre><code>┌─────────────────┐  SSH(NAT)   ┌──────────────────────┐
 │  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   Widemap Server     │  WebSocket
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
 │  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► Browser
 └─────────────────┘             │                      │
 ┌─────────────────┐  HTTP       │  Pollers:            │
@@ -387,7 +387,7 @@ npm start</code></pre>
       <p style="font-size:0.95rem; font-weight:600; margin-top:16px; margin-bottom:4px;">Step 3 — Open the browser and log in</p>
       <p style="font-size:0.85rem; color:var(--muted); margin-bottom:4px;">On first startup the initial login password is printed to the console:</p>
       <pre><code><span class="comment">══════════════════════════════════════
-  Widemap Network Monitor login password (initial):
+  EgressView login password (initial):
   KFpDqntYRfcr...
   → Log in with this password on first access
 ══════════════════════════════════════</span></code></pre>
@@ -408,7 +408,7 @@ npm start</code></pre>
           <td style="padding:6px 8px;">AP's LAN IP and admin password (<a href="https://github.com/yo1t/widemap/blob/main/docs/setup-asus.md">ASUS guide</a>)</td>
         </tr>
       </table>
-      <p style="font-size:0.85rem; color:var(--muted); margin-top:12px;">For Yamaha RTX, click <strong>Connect &amp; Auto-detect</strong> after entering the IP, username, and password. Widemap Network Monitor verifies SSH access, detects the NAT descriptor, checks LAN IP and NAT sessions, then fills the recommended settings before you save.</p>
+      <p style="font-size:0.85rem; color:var(--muted); margin-top:12px;">For Yamaha RTX, click <strong>Connect &amp; Auto-detect</strong> after entering the IP, username, and password. EgressView verifies SSH access, detects the NAT descriptor, checks LAN IP and NAT sessions, then fills the recommended settings before you save.</p>
       <p style="font-size:0.85rem; color:var(--muted); margin-top:8px;">Devices, sessions, and statistics will start appearing in the UI within a few seconds.</p>
     </div>
   </section>
@@ -470,7 +470,7 @@ npm start</code></pre>
       </div>
       <div class="card">
         <h3><a href="https://github.com/yo1t/widemap/blob/main/docs/setup-asus.md">ASUS AP Setup Guide</a></h3>
-        <p>How to configure your ASUS access point for Widemap Network Monitor.</p>
+        <p>How to configure your ASUS access point for EgressView.</p>
       </div>
       <div class="card">
         <h3><a href="https://github.com/yo1t/widemap/blob/main/LICENSE">License (AGPL-3.0)</a></h3>
@@ -483,7 +483,7 @@ npm start</code></pre>
 
 <footer>
   <p>
-    <a href="https://github.com/yo1t/widemap">Widemap Network Monitor</a> is released under the
+    <a href="https://github.com/yo1t/widemap">EgressView</a> is released under the
     <a href="https://github.com/yo1t/widemap/blob/main/LICENSE">AGPL-3.0 License</a>.
     &nbsp;·&nbsp;
     Not affiliated with or endorsed by Yamaha or ASUS.

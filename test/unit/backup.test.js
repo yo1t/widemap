@@ -99,12 +99,12 @@ describe('getBackupPath', () => {
   });
 
   it('returns null for non-existent file', () => {
-    assert.equal(backup.getBackupPath('widemap_2025-01-01_00-00-00.db'), null);
+    assert.equal(backup.getBackupPath('egressview_2025-01-01_00-00-00.db'), null);
   });
 
   it('returns the full path for an existing backup file', () => {
     fs.mkdirSync(backupDir, { recursive: true });
-    const name = 'widemap_2025-01-01_00-00-00.db';
+    const name = 'egressview_2025-01-01_00-00-00.db';
     fs.writeFileSync(path.join(backupDir, name), 'data');
     const p = backup.getBackupPath(name);
     assert.ok(p.endsWith(name));
@@ -126,23 +126,23 @@ describe('listBackups', () => {
   });
 
   it('lists backup files sorted by name', () => {
-    fs.writeFileSync(path.join(backupDir, 'widemap_2025-01-03_00-00-00.db'), 'c');
-    fs.writeFileSync(path.join(backupDir, 'widemap_2025-01-01_00-00-00.db'), 'a');
-    fs.writeFileSync(path.join(backupDir, 'widemap_2025-01-02_00-00-00.db'), 'b');
+    fs.writeFileSync(path.join(backupDir, 'egressview_2025-01-03_00-00-00.db'), 'c');
+    fs.writeFileSync(path.join(backupDir, 'egressview_2025-01-01_00-00-00.db'), 'a');
+    fs.writeFileSync(path.join(backupDir, 'egressview_2025-01-02_00-00-00.db'), 'b');
     const list = backup.listBackups();
     assert.equal(list.length, 3);
-    assert.equal(list[0].name, 'widemap_2025-01-01_00-00-00.db');
-    assert.equal(list[2].name, 'widemap_2025-01-03_00-00-00.db');
+    assert.equal(list[0].name, 'egressview_2025-01-01_00-00-00.db');
+    assert.equal(list[2].name, 'egressview_2025-01-03_00-00-00.db');
   });
 
   it('ignores non-.db files', () => {
-    fs.writeFileSync(path.join(backupDir, 'widemap_2025-01-01_00-00-00.db'), 'ok');
+    fs.writeFileSync(path.join(backupDir, 'egressview_2025-01-01_00-00-00.db'), 'ok');
     fs.writeFileSync(path.join(backupDir, 'README.txt'), 'ignore me');
     assert.equal(backup.listBackups().length, 1);
   });
 
   it('each entry has name, size, created fields', () => {
-    fs.writeFileSync(path.join(backupDir, 'widemap_2025-01-01_00-00-00.db'), 'hello');
+    fs.writeFileSync(path.join(backupDir, 'egressview_2025-01-01_00-00-00.db'), 'hello');
     const [entry] = backup.listBackups();
     assert.ok(typeof entry.name === 'string');
     assert.ok(typeof entry.size === 'number');
@@ -166,7 +166,7 @@ describe('createBackup', () => {
   it('creates a backup file and returns its name', async () => {
     const name = await backup.createBackup();
     assert.ok(typeof name === 'string');
-    assert.ok(name.startsWith('widemap_'));
+    assert.ok(name.startsWith('egressview_'));
     assert.ok(name.endsWith('.db'));
     const p = path.join(backupDir, name);
     assert.ok(fs.existsSync(p));
@@ -215,7 +215,7 @@ describe('pruneOldBackups', () => {
 
   it('removes oldest files when count exceeds maxGenerations', async () => {
     for (let i = 1; i <= 5; i++) {
-      fs.writeFileSync(path.join(backupDir, `widemap_2025-01-0${i}_00-00-00.db`), 'x');
+      fs.writeFileSync(path.join(backupDir, `egressview_2025-01-0${i}_00-00-00.db`), 'x');
     }
     // Trigger prune by creating one more backup (createBackup calls pruneOldBackups)
     await backup.createBackup();
@@ -262,7 +262,7 @@ describe('restoreFromGeneration', () => {
 
   it('rejects for an unknown backup name', async () => {
     await assert.rejects(
-      () => backup.restoreFromGeneration('widemap_9999-01-01_00-00-00.db'),
+      () => backup.restoreFromGeneration('egressview_9999-01-01_00-00-00.db'),
       /not found/i
     );
   });
@@ -271,7 +271,7 @@ describe('restoreFromGeneration', () => {
     // Use a fixed past timestamp so the safety backup (created inside
     // restoreFromFile) gets a different name and does not overwrite
     // the source backup we want to restore from.
-    const name = 'widemap_2025-01-01_12-00-00.db';
+    const name = 'egressview_2025-01-01_12-00-00.db';
     fs.mkdirSync(backupDir, { recursive: true });
     makeRealDb(path.join(backupDir, name), 'fake-db-content');
 

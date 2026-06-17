@@ -1,4 +1,4 @@
-# Widemap Network Monitor ロードマップ
+# EgressView ロードマップ
 
 > 🌐 [English version](ROADMAP.md)
 

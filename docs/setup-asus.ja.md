@@ -1,8 +1,8 @@
 # ASUS WiFi AP — 設定ガイド
 
-Widemap Network Monitor で使用するための ASUS WiFi アクセスポイントの準備手順です。
+EgressView で使用するための ASUS WiFi アクセスポイントの準備手順です。
 
-Widemap Network Monitor は ASUS デバイスを**WiFi アクセスポイント（AP モードまたは AiMesh ノード）**として使用します。ルーターとしてではありません。Yamaha RTX がすべてのルーティングと NAT を担当し、ASUS AP は L2 の可視性を提供します：どのデバイスが接続中か、どの帯域（2.4G/5G/6G）で、信号強度とトラフィック量はどのくらいか。
+EgressView は ASUS デバイスを**WiFi アクセスポイント（AP モードまたは AiMesh ノード）**として使用します。ルーターとしてではありません。Yamaha RTX がすべてのルーティングと NAT を担当し、ASUS AP は L2 の可視性を提供します：どのデバイスが接続中か、どの帯域（2.4G/5G/6G）で、信号強度とトラフィック量はどのくらいか。
 
 **対応モデル:** RT-AX シリーズ（AX86U, AX88U, AX92U 等）、RT-AC シリーズ、ZenWiFi（AiMesh）
 
@@ -50,16 +50,16 @@ arp -a | grep -i asus
 
 ---
 
-## Step 4 — Widemap Network Monitor に設定を入力
+## Step 4 — EgressView に設定を入力
 
-Widemap Network Monitor の設定パネル（⚙）を開き、以下を入力します：
+EgressView の設定パネル（⚙）を開き、以下を入力します：
 
 | 項目 | 値 |
 |------|---|
 | ASUS AP の IP アドレス | AP の LAN 側 IP（例: `192.168.1.2`） |
 | ASUS AP のパスワード | 管理者パスワード |
 
-Widemap Network Monitor は SHA256 チャレンジレスポンスで自動認証し、数秒ごとにクライアント情報を取得します。
+EgressView は SHA256 チャレンジレスポンスで自動認証し、数秒ごとにクライアント情報を取得します。
 
 ---
 
@@ -75,18 +75,18 @@ Widemap Network Monitor は SHA256 チャレンジレスポンスで自動認証
 - AP モードに切り替えると IP アドレスが変わります。Yamaha RTX で `show arp` を実行して新しい IP を確認してください
 - `http://router.asus.com/` でもアクセスできる場合があります
 
-**Widemap Network Monitor で認証に失敗する**
+**EgressView で認証に失敗する**
 - `http://<asus-ap-ip>/` に直接ログインしてパスワードを確認してください
-- Widemap Network Monitor の設定パネルでパスワードを再入力してください
+- EgressView の設定パネルでパスワードを再入力してください
 
 **WiFi クライアントが表示されない**
 - デバイスが ASUS AP（他のアクセスポイントではなく）に接続されているか確認してください
-- Widemap Network Monitor の設定パネルで ASUS AP の IP アドレスが正しいか確認してください
+- EgressView の設定パネルで ASUS AP の IP アドレスが正しいか確認してください
 
 ---
 
-## Widemap Network Monitor が ASUS AP から取得する情報
+## EgressView が ASUS AP から取得する情報
 
 - 接続クライアント一覧: MAC アドレス、IP、接続種別（有線 / 2.4G / 5G / 6G）、RSSI、TX/RX レート
 - AiMesh トポロジー: 各クライアントがどのサテライトノードに接続しているか
-- Widemap Network Monitor は ASUS の設定を**変更しません**
+- EgressView は ASUS の設定を**変更しません**

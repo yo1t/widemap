@@ -129,8 +129,8 @@ async function notify(entry) {
 }
 
 const _TEST_MSG = {
-  ja: '✅ Widemap Network Monitor — Slack通知の設定が完了しました。脅威検出時にこのDMに通知が届きます。',
-  en: '✅ Widemap Network Monitor — Slack notifications configured. You will receive a DM here when a threat is detected.',
+  ja: '✅ EgressView — Slack通知の設定が完了しました。脅威検出時にこのDMに通知が届きます。',
+  en: '✅ EgressView — Slack notifications configured. You will receive a DM here when a threat is detected.',
 };
 
 const _NEW_DEVICE_MSG = {

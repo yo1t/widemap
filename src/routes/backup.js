@@ -78,7 +78,7 @@ module.exports = function backupRoutes(ctx) {
         if (buf.length < 100) return res.status(400).json({ error: 'File too small' });
         if (!buf.slice(0, 16).equals(Buffer.from('SQLite format 3\0')))
           return res.status(400).json({ error: 'Invalid database file' });
-        const tempPath = path.join(appRoot, '.widemap-upload-temp.db');
+        const tempPath = path.join(appRoot, '.egressview-upload-temp.db');
         fs.writeFileSync(tempPath, buf);
         await backup.restoreFromFile(tempPath);
         fs.unlinkSync(tempPath);

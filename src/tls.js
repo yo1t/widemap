@@ -6,8 +6,8 @@ const fs   = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const DEFAULT_CERT = '.widemap-cert.pem';
-const DEFAULT_KEY  = '.widemap-key.pem';
+const DEFAULT_CERT = '.egressview-cert.pem';
+const DEFAULT_KEY  = '.egressview-key.pem';
 
 /**
  * Return `{ key, cert }` for https.createServer, or null on failure.
@@ -35,7 +35,7 @@ function loadOrCreate(cfg = {}, appRoot = process.cwd()) {
       execFileSync('openssl', [
         'req', '-x509', '-newkey', 'rsa:2048', '-sha256', '-nodes',
         '-keyout', keyFile, '-out', certFile,
-        '-days', '3650', '-subj', '/CN=widemap',
+        '-days', '3650', '-subj', '/CN=egressview',
       ], { stdio: 'pipe' });
       fs.chmodSync(keyFile, 0o600);
       logger.info(`[tls] Created ${path.basename(certFile)} / ${path.basename(keyFile)}`);

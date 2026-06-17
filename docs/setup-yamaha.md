@@ -1,6 +1,6 @@
 # Yamaha RTX — SSH Setup Guide
 
-This guide explains how to enable SSH access on your Yamaha RTX router so Widemap Network Monitor can connect to it.
+This guide explains how to enable SSH access on your Yamaha RTX router so EgressView can connect to it.
 
 **Supported models:** RTX1200, RTX1210, RTX1220, RTX1300, RTX810, RTX830, NVR500, NVR510, NVR700W
 
@@ -22,7 +22,7 @@ telnet 192.168.1.1
 ## Step 2 — Create an SSH login user
 
 ```
-# Create a dedicated user for Widemap Network Monitor (replace "widemap" and "yourpassword")
+# Create a dedicated user for EgressView (replace "widemap" and "yourpassword")
 login user widemap yourpassword <!-- pragma: allowlist secret -->
 ```
 
@@ -51,7 +51,7 @@ SSH service     : enable
 
 ## Step 4 — Verify NAT is configured (set it up if not already)
 
-Widemap Network Monitor reads the NAT session table, so NAT (masquerade) must be running on the router first.
+EgressView reads the NAT session table, so NAT (masquerade) must be running on the router first.
 
 Check the current configuration:
 
@@ -110,7 +110,7 @@ save
 
 ## Step 5 — Check the NAT descriptor number
 
-Widemap Network Monitor reads the NAT session table. Find the descriptor number used by your router:
+EgressView reads the NAT session table. Find the descriptor number used by your router:
 
 ```
 show nat descriptor
@@ -122,7 +122,7 @@ NAT descriptor list:
   100: masquerade
 ```
 
-Note this number (typically `100`). You will enter it in Widemap Network Monitor's Settings panel.
+Note this number (typically `100`). You will enter it in EgressView's Settings panel.
 
 ---
 
@@ -144,9 +144,9 @@ If you can log in successfully, the setup is complete.
 
 ---
 
-## Step 8 — Enter settings in Widemap Network Monitor
+## Step 8 — Enter settings in EgressView
 
-Open the Widemap Network Monitor Settings panel (⚙) and fill in:
+Open the EgressView Settings panel (⚙) and fill in:
 
 | Field | Value |
 |-------|-------|
@@ -167,7 +167,7 @@ Open the Widemap Network Monitor Settings panel (⚙) and fill in:
 - Verify the username and password with `show login user`
 - Re-enter the password: `login user widemap newpassword` then `save` <!-- pragma: allowlist secret -->
 
-**No sessions appearing in Widemap Network Monitor**
+**No sessions appearing in EgressView**
 - Confirm the NAT descriptor number matches what `show nat descriptor` returns
 - Run `show nat descriptor address 100 detail` on the router to verify sessions exist
 
@@ -176,5 +176,5 @@ Open the Widemap Network Monitor Settings panel (⚙) and fill in:
 ## Security notes
 
 - SSH access is limited to devices on the LAN by default — no internet exposure
-- Widemap Network Monitor only reads session data; it does **not** modify any router configuration
+- EgressView only reads session data; it does **not** modify any router configuration
 - You can restrict the SSH user to read-only commands using `login user privilege` if your firmware supports it

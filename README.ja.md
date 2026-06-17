@@ -1,8 +1,8 @@
-# Widemap Network Monitor
+# EgressView
 
 **家庭・SOHO向けネットワークセキュリティモニター — LAN内の全デバイスの通信先をリアルタイムに可視化**
 
-スマートTVが見知らぬサーバーと通信していないか？IPカメラやIoT機器、NASが許可していない接続をしていないか？Widemap Network Monitorは、LAN内の全デバイスが外部と行う通信を**パッシブに監視**し、グラフマップ/統計情報で全体像を把握し、通信ログ/端末一覧で詳細へドリルダウンできます。脅威フィードとの自動照合、Slack通知に対応。
+スマートTVが見知らぬサーバーと通信していないか？IPカメラやIoT機器、NASが許可していない接続をしていないか？EgressViewは、LAN内の全デバイスが外部と行う通信を**パッシブに監視**し、グラフマップ/統計情報で全体像を把握し、通信ログ/端末一覧で詳細へドリルダウンできます。脅威フィードとの自動照合、Slack通知に対応。
 
 追加ハードウェア不要。通信の中継・傍受も不要。既存のYamaha RTXルーターのNATセッションテーブルを読み取るだけで動作します。
 
@@ -17,7 +17,7 @@
 
 現代の家庭やSOHOネットワークには、スマートTV・IPカメラ・NAS・Wi-Fiスピーカー・プリンター・ネットワーク機器・PC・スマートフォンなど、20〜40台以上のデバイスが接続されています。IoT機器の多くはファームウェア更新が不定期で、どこに通信しているか把握されていません。一度侵害されると、C2サーバーへのデータ流出やボットネットへの加担が、ユーザーに気づかれないまま進みます。
 
-Widemap Network Monitorは、多くの家庭ユーザーが答えを持てていない問いに答えます：**自分のネットワーク上の各デバイスは、今どこと通信しているのか？**
+EgressViewは、多くの家庭ユーザーが答えを持てていない問いに答えます：**自分のネットワーク上の各デバイスは、今どこと通信しているのか？**
 
 - **パッシブ・ゼロインパクト監視** — ルーターのNATセッションテーブルをSSHで読み取るだけ。通信の中継・傍受なし、スループット低下なし
 - **デバイス単位の可視性** — OUI・mDNS・SSDP・NetBIOSによるデバイス識別で、どの機器が何と通信しているかを把握
@@ -65,7 +65,7 @@ https://github.com/user-attachments/assets/8682ec5f-1632-400f-b31b-d371f6b1b237
 ```
 ┌─────────────────┐  SSH(NAT)   ┌──────────────────────┐
 │  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   Widemap Server     │  WebSocket
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
 │  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► ブラウザ
 └─────────────────┘             │                      │
 ┌─────────────────┐  HTTP       │  ポーラー:            │
@@ -131,7 +131,7 @@ npm start
 
 ```
 ══════════════════════════════════════════════════════════════
-  Widemap Network Monitor login password (initial):
+  EgressView login password (initial):
   KFpDqntYRfcr...
   → ブラウザ初回アクセス時にこのパスワードでログインしてください
 ══════════════════════════════════════════════════════════════
@@ -192,7 +192,7 @@ npm start
 "https": { "enabled": true }
 ```
 
-自己署名証明書（`.widemap-cert.pem` / `.widemap-key.pem`、有効期限10年）が `openssl` CLI で自動生成されます。ブラウザに初回のみ警告が表示されるので許可してください。自前の証明書を使う場合：
+自己署名証明書（`.egressview-cert.pem` / `.egressview-key.pem`、有効期限10年）が `openssl` CLI で自動生成されます。ブラウザに初回のみ警告が表示されるので許可してください。自前の証明書を使う場合：
 
 ```json
 "https": { "enabled": true, "certPath": "/path/to/cert.pem", "keyPath": "/path/to/key.pem" }
@@ -214,7 +214,7 @@ npm start
 | `YAMAHA_PASS` | — | Yamaha SSHパスワード |
 | `YAMAHA_NAT` | `100` | NATディスクリプタ番号 |
 | `SUBPATH` | — | リバースプロキシのサブパス（例: `/widemap`） |
-| `WIDEMAP_DB` | `.widemap.db` | SQLite データベースファイルのパス |
+| `EGRESSVIEW_DB` | `.widemap.db` | SQLite データベースファイルのパス |
 | `LOG_LEVEL` | `info` | ログ詳細度: `error` / `warn` / `info` / `debug` |
 
 ## 機能詳細
@@ -296,17 +296,17 @@ SSH接続とNATディスクリプタに対応した全モデル：
 
 ## ライセンス
 
-Widemap Network Monitor はデュアルライセンスです。
+EgressView はデュアルライセンスです。
 
 - オープンソースライセンス: [GNU Affero General Public License v3.0](LICENSE)
 - 商用ライセンス: プロプライエタリ利用・クローズドソース利用向けに別途提供
 
-AGPL-3.0 の条件に従う限り、Widemap Network Monitor を利用・改変・配布できます。Widemap Network Monitor またはその派生物をプロプライエタリ製品に組み込む場合、ソースコードを公開せずに配布する場合、または改変版をネットワークサービスとして提供する場合は、AGPL-3.0 のソースコード提供義務を遵守する必要があります。
+AGPL-3.0 の条件に従う限り、EgressView を利用・改変・配布できます。EgressView またはその派生物をプロプライエタリ製品に組み込む場合、ソースコードを公開せずに配布する場合、または改変版をネットワークサービスとして提供する場合は、AGPL-3.0 のソースコード提供義務を遵守する必要があります。
 
-AGPL-3.0 に基づく対応するソースコード公開を行わずに、Widemap Network Monitor をプロプライエタリまたはクローズドソースの商用製品で利用したい場合は、著作権者から商用ライセンスを取得する必要があります。
+AGPL-3.0 に基づく対応するソースコード公開を行わずに、EgressView をプロプライエタリまたはクローズドソースの商用製品で利用したい場合は、著作権者から商用ライセンスを取得する必要があります。
 
 ```
-Widemap Network Monitor — リアルタイムネットワーク接続可視化ツール
+EgressView — リアルタイムネットワーク接続可視化ツール
 Copyright (C) 2025 Yoichi Takizawa
 
 ソースコード: https://github.com/yo1t/widemap

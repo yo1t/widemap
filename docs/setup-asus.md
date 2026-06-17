@@ -1,8 +1,8 @@
 # ASUS WiFi AP — Setup Guide
 
-This guide explains how to prepare your ASUS WiFi access point for Widemap Network Monitor.
+This guide explains how to prepare your ASUS WiFi access point for EgressView.
 
-Widemap Network Monitor uses the ASUS device as a **WiFi access point (AP mode or AiMesh node)** — not as a router. The Yamaha RTX handles all routing and NAT. The ASUS AP provides L2 visibility: which devices are connected, on which band (2.4G/5G/6G), and their signal strength and traffic rates.
+EgressView uses the ASUS device as a **WiFi access point (AP mode or AiMesh node)** — not as a router. The Yamaha RTX handles all routing and NAT. The ASUS AP provides L2 visibility: which devices are connected, on which band (2.4G/5G/6G), and their signal strength and traffic rates.
 
 **Supported models:** RT-AX series (AX86U, AX88U, AX92U, etc.), RT-AC series, ZenWiFi (AiMesh)
 
@@ -50,22 +50,22 @@ Open `http://<asus-ap-ip>/` in your browser. You should see the ASUS login scree
 
 ---
 
-## Step 4 — Enter settings in Widemap Network Monitor
+## Step 4 — Enter settings in EgressView
 
-Open the Widemap Network Monitor Settings panel (⚙) and fill in:
+Open the EgressView Settings panel (⚙) and fill in:
 
 | Field | Value |
 |-------|-------|
 | ASUS AP IP | The AP's LAN IP (e.g. `192.168.1.2`) |
 | ASUS AP password | Your admin password |
 
-Widemap Network Monitor will authenticate automatically using SHA256 challenge-response and start polling client data every few seconds.
+EgressView will authenticate automatically using SHA256 challenge-response and start polling client data every few seconds.
 
 ---
 
 ## AiMesh (multi-AP) setup
 
-If you have multiple ASUS devices in an AiMesh topology, you only need to configure the **main (primary) AiMesh router**. Widemap Network Monitor discovers satellite nodes automatically via the AiMesh API.
+If you have multiple ASUS devices in an AiMesh topology, you only need to configure the **main (primary) AiMesh router**. EgressView discovers satellite nodes automatically via the AiMesh API.
 
 ---
 
@@ -75,18 +75,18 @@ If you have multiple ASUS devices in an AiMesh topology, you only need to config
 - The IP address changes after switching to AP mode. Use `show arp` on the Yamaha RTX to find the new IP
 - Try `http://router.asus.com/` — ASUS may still respond on this hostname
 
-**Authentication fails in Widemap Network Monitor**
+**Authentication fails in EgressView**
 - Verify the password by logging in directly at `http://<asus-ap-ip>/`
-- Re-enter the password in the Widemap Network Monitor Settings panel
+- Re-enter the password in the EgressView Settings panel
 
 **No WiFi clients appearing**
 - Confirm devices are connected to the ASUS AP (not to another access point)
-- Check that the ASUS AP IP in Widemap Network Monitor Settings is correct
+- Check that the ASUS AP IP in EgressView Settings is correct
 
 ---
 
-## What Widemap Network Monitor reads from the ASUS AP
+## What EgressView reads from the ASUS AP
 
 - Connected client list: MAC address, IP, connection type (wired / 2.4G / 5G / 6G), RSSI, TX/RX rates
 - AiMesh topology: which satellite node each client is connected to
-- Widemap Network Monitor does **not** modify any ASUS settings
+- EgressView does **not** modify any ASUS settings

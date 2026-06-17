@@ -3,18 +3,18 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Widemap Network Monitor — 家庭・SOHO向けネットワークセキュリティモニター</title>
+  <title>EgressView — 家庭・SOHO向けネットワークセキュリティモニター</title>
   <meta name="description" content="Where Is Data Exiting? Map All Paths. LAN内の全デバイスの通信先をパッシブに監視。グラフマップと統計情報で全体を把握し、通信ログと端末一覧で詳細へドリルダウン。C2/ボットネット自動検出、Slackアラート対応。Yamaha RTXルーター専用 — 追加ハードウェア不要。">
   <meta name="keywords" content="ネットワークセキュリティ, IoTセキュリティ, ホームネットワークセキュリティ, SOHO, Yamaha RTX, ネットワーク可視化, C2検出, ボットネット検出, 脅威インテリジェンス, LAN監視, オープンソース">
   <meta name="author" content="Yoichi Takizawa">
   <link rel="canonical" href="https://yo1t.github.io/widemap/index.ja.html">
-  <meta property="og:title" content="Widemap Network Monitor — 家庭・SOHO向けネットワークセキュリティモニター">
+  <meta property="og:title" content="EgressView — 家庭・SOHO向けネットワークセキュリティモニター">
   <meta property="og:description" content="LAN内の全デバイスの通信先をパッシブに監視。グラフマップ/統計情報で全体を把握し、通信ログ/端末一覧で詳細へドリルダウン。C2/ボットネット自動検出、Slackアラート対応。追加ハードウェア不要。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://yo1t.github.io/widemap/index.ja.html">
   <meta property="og:image" content="https://raw.githubusercontent.com/yo1t/widemap/main/docs/widemap1.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Widemap Network Monitor — 家庭・SOHO向けネットワークセキュリティモニター">
+  <meta name="twitter:title" content="EgressView — 家庭・SOHO向けネットワークセキュリティモニター">
   <meta name="twitter:description" content="LAN内の全デバイスの通信先をパッシブに監視。グラフマップ/統計情報で全体を把握し、通信ログ/端末一覧で詳細へドリルダウン。C2/ボットネット自動検出、Slackアラート対応。追加ハードウェア不要。">
   <meta name="twitter:image" content="https://raw.githubusercontent.com/yo1t/widemap/main/docs/widemap1.png">
   <style>
@@ -191,7 +191,7 @@
 </div>
 
 <header>
-  <h1><span>Widemap Network Monitor</span></h1>
+  <h1><span>EgressView</span></h1>
   <p>Where Is Data Exiting? Map All Paths. — 家庭・SOHOのLAN内デバイスが「何と通信しているか」を把握。グラフマップ/統計情報で全体を見て、通信ログ/端末一覧で詳細調査。自動脅威検出とSlackアラート対応。</p>
   <div class="badges">
     <a href="https://opensource.org/licenses/AGPL-3.0"><img src="https://img.shields.io/badge/License-AGPL--3.0-blue.svg" alt="License: AGPL-3.0"></a>
@@ -316,10 +316,10 @@
   <section id="screenshots">
     <h2><span class="icon">◈</span> スクリーンショット</h2>
     <div class="screenshot-grid">
-      <img src="docs/widemap1.png" alt="Widemap Network Monitor グラフマップ — LANデバイスと接続先の全体把握" loading="lazy">
-      <img src="docs/widemap2.png" alt="Widemap Network Monitor 統計情報 — 接続履歴チャート" loading="lazy">
-      <img src="docs/widemap3.png" alt="Widemap Network Monitor 通信ログ — 詳細ドリルダウン" loading="lazy">
-      <img src="docs/widemap4.png" alt="Widemap Network Monitor 端末一覧 — 詳細ドリルダウン" loading="lazy">
+      <img src="docs/widemap1.png" alt="EgressView グラフマップ — LANデバイスと接続先の全体把握" loading="lazy">
+      <img src="docs/widemap2.png" alt="EgressView 統計情報 — 接続履歴チャート" loading="lazy">
+      <img src="docs/widemap3.png" alt="EgressView 通信ログ — 詳細ドリルダウン" loading="lazy">
+      <img src="docs/widemap4.png" alt="EgressView 端末一覧 — 詳細ドリルダウン" loading="lazy">
     </div>
   </section>
 
@@ -329,7 +329,7 @@
     <div class="arch-block">
       <pre><code>┌─────────────────┐  SSH(NAT)   ┌──────────────────────┐
 │  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   Widemap Server     │  WebSocket
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
 │  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► ブラウザ
 └─────────────────┘             │                      │
 ┌─────────────────┐  HTTP       │  ポーラー:            │
@@ -387,7 +387,7 @@ npm start</code></pre>
       <p style="font-size:0.95rem; font-weight:600; margin-top:16px; margin-bottom:4px;">Step 3 — ブラウザを開いてログイン</p>
       <p style="font-size:0.85rem; color:var(--muted); margin-bottom:4px;">初回起動時にコンソールに初期ログインパスワードが表示されます：</p>
       <pre><code><span class="comment">══════════════════════════════════════
-  Widemap Network Monitor login password (initial):
+  EgressView login password (initial):
   KFpDqntYRfcr...
   → ブラウザ初回アクセス時にこのパスワードでログインしてください
 ══════════════════════════════════════</span></code></pre>
@@ -470,7 +470,7 @@ npm start</code></pre>
       </div>
       <div class="card">
         <h3><a href="https://github.com/yo1t/widemap/blob/main/docs/setup-asus.ja.md">ASUS AP 設定ガイド</a></h3>
-        <p>ASUS アクセスポイントを Widemap Network Monitor 用に設定する手順。</p>
+        <p>ASUS アクセスポイントを EgressView 用に設定する手順。</p>
       </div>
       <div class="card">
         <h3><a href="https://github.com/yo1t/widemap/blob/main/LICENSE">ライセンス (AGPL-3.0)</a></h3>
@@ -483,7 +483,7 @@ npm start</code></pre>
 
 <footer>
   <p>
-    <a href="https://github.com/yo1t/widemap">Widemap Network Monitor</a> は
+    <a href="https://github.com/yo1t/widemap">EgressView</a> は
     <a href="https://github.com/yo1t/widemap/blob/main/LICENSE">AGPL-3.0 ライセンス</a>で公開されています。
     &nbsp;·&nbsp;
     Yamaha および ASUS とは無関係であり、推奨を受けていません。

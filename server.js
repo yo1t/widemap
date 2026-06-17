@@ -52,7 +52,28 @@ const SUBPATH           = (process.env.SUBPATH || '').replace(/\/$/, '');
 const DEFAULT_ROUTER_IP = process.env.ROUTER_IP   || '192.168.1.1';
 const POLL_INTERVAL     = parseInt(process.env.POLL_INTERVAL_MS || '60000');
 const PORT              = parseInt(process.env.PORT || '3000');
-const CONFIG_FILE       = path.join(__dirname, '.widemap.json');
+const CONFIG_FILE       = require('./src/config').DEFAULT_CONFIG_FILE;
+
+// ─── One-time migration: rename legacy .widemap.* files to .egressview.* ────
+(function migrateFromWidemap() {
+  const renames = [
+    ['.widemap.db',              '.egressview.db'],
+    ['.widemap.db-wal',          '.egressview.db-wal'],
+    ['.widemap.db-shm',          '.egressview.db-shm'],
+    ['.widemap.notes.json',      '.egressview.notes.json'],
+    ['.widemap.connections.jsonl', '.egressview.connections.jsonl'],
+    ['.widemap-cert.pem',        '.egressview-cert.pem'],
+    ['.widemap-key.pem',         '.egressview-key.pem'],
+    ['.widemap-backups',         '.egressview-backups'],
+  ];
+  for (const [oldName, newName] of renames) {
+    const oldPath = path.join(__dirname, oldName);
+    const newPath = path.join(__dirname, newName);
+    if (fs.existsSync(oldPath) && !fs.existsSync(newPath)) {
+      try { fs.renameSync(oldPath, newPath); } catch {}
+    }
+  }
+})();
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────
 // Passed by reference to route modules so they can read and mutate it.
@@ -128,7 +149,7 @@ const io     = new Server(server, {
   },
 });
 
-// ─── Config: load from / save to .widemap.json ───────────────────────────────
+// ─── Config: load from / save to config file ─────────────────────────────────
 
 function loadConfig() {
   const data = configIo.loadFile(CONFIG_FILE);
@@ -244,7 +265,7 @@ function ensureAdminToken() {
     appState.adminToken = crypto.randomBytes(24).toString('hex');
     saveConfig();
     console.log('\n══════════════════════════════════════════════════════════════');
-    console.log('  Widemap Network Monitor admin token (initial):');
+    console.log('  EgressView admin token (initial):');
     console.log('  ' + appState.adminToken);
     console.log('  → API/自動化用トークン（ブラウザはパスワードでログイン）');
     console.log('══════════════════════════════════════════════════════════════\n');
@@ -259,7 +280,7 @@ function ensureLoginPassword() {
     appState.authPasswordHash = hash;
     saveConfig();
     console.log('\n══════════════════════════════════════════════════════════════');
-    console.log('  Widemap Network Monitor login password (initial):');
+    console.log('  EgressView login password (initial):');
     console.log('  ' + initial);
     console.log('  → ブラウザ初回アクセス時にこのパスワードでログインしてください');
     console.log('    （設定画面からいつでも変更できます）');
@@ -639,7 +660,7 @@ dhcpdSyslog.configure({
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 server.listen(PORT, () => {
-  console.log(`Widemap Network Monitor: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
+  console.log(`EgressView: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
   loadConfig();
   ensureAdminToken();
   ensureLoginPassword();

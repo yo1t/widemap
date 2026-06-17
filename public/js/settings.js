@@ -319,7 +319,7 @@ document.getElementById('slack-test-btn').addEventListener('click', async () => 
 // Load threat settings from localStorage on init
 (function loadThreatSettings() {
   try {
-    const raw = localStorage.getItem('widemap_threat_config');
+    const raw = localStorage.getItem('egressview_threat_config');
     if (!raw) return;
     const config = JSON.parse(raw);
     if (config.feeds) {

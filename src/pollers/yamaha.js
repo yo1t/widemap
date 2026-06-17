@@ -419,7 +419,7 @@ function connectYamaha(onReady) {
       logger.error('[yamaha] ⚠️ HOST KEY MISMATCH! Possible MITM attack.');
       logger.error(`  Expected: ${yamahaHostFp.substring(0, 16)}...`);
       logger.error(`  Got:      ${fp.substring(0, 16)}...`);
-      logger.error('  鍵を更新する場合は .widemap.json の yamaha.hostFp を削除してください');
+      logger.error('  鍵を更新する場合は .egressview.json の yamaha.hostFp を削除してください');
       return false;
     }
     return true;
