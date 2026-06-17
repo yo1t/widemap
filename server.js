@@ -244,7 +244,7 @@ function ensureAdminToken() {
     appState.adminToken = crypto.randomBytes(24).toString('hex');
     saveConfig();
     console.log('\n══════════════════════════════════════════════════════════════');
-    console.log('  Widemap admin token (initial):');
+    console.log('  Widemap Network Monitor admin token (initial):');
     console.log('  ' + appState.adminToken);
     console.log('  → API/自動化用トークン（ブラウザはパスワードでログイン）');
     console.log('══════════════════════════════════════════════════════════════\n');
@@ -259,7 +259,7 @@ function ensureLoginPassword() {
     appState.authPasswordHash = hash;
     saveConfig();
     console.log('\n══════════════════════════════════════════════════════════════');
-    console.log('  Widemap login password (initial):');
+    console.log('  Widemap Network Monitor login password (initial):');
     console.log('  ' + initial);
     console.log('  → ブラウザ初回アクセス時にこのパスワードでログインしてください');
     console.log('    （設定画面からいつでも変更できます）');
@@ -639,7 +639,7 @@ dhcpdSyslog.configure({
 // ─── Startup ──────────────────────────────────────────────────────────────────
 
 server.listen(PORT, () => {
-  console.log(`Widemap: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
+  console.log(`Widemap Network Monitor: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
   loadConfig();
   ensureAdminToken();
   ensureLoginPassword();

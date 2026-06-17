@@ -1,6 +1,6 @@
 # Yamaha RTX — SSH 設定ガイド
 
-Widemap が接続できるよう、Yamaha RTX ルーターの SSH アクセスを有効化する手順です。
+Widemap Network Monitor が接続できるよう、Yamaha RTX ルーターの SSH アクセスを有効化する手順です。
 
 **対応モデル:** RTX1200, RTX1210, RTX1220, RTX1300, RTX810, RTX830, NVR500, NVR510, NVR700W
 
@@ -22,7 +22,7 @@ telnet 192.168.1.1
 ## Step 2 — SSH 用ログインユーザーを作成
 
 ```
-# Widemap 専用ユーザーを作成（"widemap" とパスワードは任意の値に変更してください）
+# Widemap Network Monitor 専用ユーザーを作成（"widemap" とパスワードは任意の値に変更してください）
 login user widemap yourpassword <!-- pragma: allowlist secret -->
 ```
 
@@ -51,7 +51,7 @@ SSH service     : enable
 
 ## Step 4 — NAT が設定されているか確認（まだの場合はサンプルを参考に設定）
 
-Widemap は NAT セッションテーブルを読み取るため、ルーターで NAT（masquerade）が動作していることが前提です。
+Widemap Network Monitor は NAT セッションテーブルを読み取るため、ルーターで NAT（masquerade）が動作していることが前提です。
 
 まず現在の設定を確認します：
 
@@ -110,7 +110,7 @@ save
 
 ## Step 5 — NAT ディスクリプタ番号を確認
 
-Widemap は NAT セッションテーブルを読み取ります。ルーターで使用しているディスクリプタ番号を確認します：
+Widemap Network Monitor は NAT セッションテーブルを読み取ります。ルーターで使用しているディスクリプタ番号を確認します：
 
 ```
 show nat descriptor
@@ -122,7 +122,7 @@ NAT descriptor list:
   100: masquerade
 ```
 
-この番号（通常は `100`）を控えておきます。Widemap の設定パネルで入力します。
+この番号（通常は `100`）を控えておきます。Widemap Network Monitor の設定パネルで入力します。
 
 ---
 
@@ -144,9 +144,9 @@ ssh widemap@192.168.1.1
 
 ---
 
-## Step 8 — Widemap に設定を入力
+## Step 8 — Widemap Network Monitor に設定を入力
 
-Widemap の設定パネル（⚙）を開き、以下を入力します：
+Widemap Network Monitor の設定パネル（⚙）を開き、以下を入力します：
 
 | 項目 | 値 |
 |------|---|
@@ -167,7 +167,7 @@ Widemap の設定パネル（⚙）を開き、以下を入力します：
 - `show login user` でユーザー名を確認してください
 - パスワードを再設定: `login user widemap newpassword` → `save` <!-- pragma: allowlist secret -->
 
-**Widemap にセッションが表示されない**
+**Widemap Network Monitor にセッションが表示されない**
 - NAT ディスクリプタ番号が `show nat descriptor` の結果と一致しているか確認してください
 - ルーターで `show nat descriptor address 100 detail` を実行してセッションが存在するか確認してください
 
@@ -176,5 +176,5 @@ Widemap の設定パネル（⚙）を開き、以下を入力します：
 ## セキュリティに関する注意
 
 - SSH アクセスはデフォルトで LAN 内のデバイスに限定されます（インターネットには公開されません）
-- Widemap はセッション情報の読み取りのみを行います。ルーターの設定を**変更しません**
+- Widemap Network Monitor はセッション情報の読み取りのみを行います。ルーターの設定を**変更しません**
 - ファームウェアが対応していれば `login user privilege` で SSH ユーザーを読み取り専用に制限できます

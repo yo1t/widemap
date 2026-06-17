@@ -1,4 +1,4 @@
-# Widemap ロードマップ
+# Widemap Network Monitor ロードマップ
 
 > 🌐 [English version](ROADMAP.md)
 

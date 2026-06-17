@@ -1,5 +1,5 @@
 #!/bin/bash
-# Widemap server control script
+# Widemap Network Monitor server control script
 # Usage: start.sh [start|stop|status]
 # On EC2, delegates to systemd. Locally, manages a PID file.
 
