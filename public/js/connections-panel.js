@@ -9,6 +9,14 @@ let dataRangeFrom = Date.now() - 86400_000;
 let customRangeFrom = null; // ms (for custom filter)
 let customRangeTo   = null;
 
+// ── Fetch-in-progress indicator ───────────────────────────────────────────────
+let _fetchingCount = 0;
+function setFetching(delta) {
+  _fetchingCount = Math.max(0, _fetchingCount + delta);
+  const el = document.getElementById('data-fetching');
+  if (el) el.style.display = _fetchingCount > 0 ? '' : 'none';
+}
+
 function connectionKey(c) {
   return `${c.src}|${c.dst}|${c.dport}|${c.proto}`;
 }

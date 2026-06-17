@@ -89,6 +89,7 @@ socket.on('connections-update', data => {
   // and merge so real-time deltas that arrived during the fetch are not lost.
   if (data.initialLoad) {
     const from24h = Date.now() - 86_400_000;
+    setFetching(+1);
     apiFetch(`${_BASE}/api/connections?from=${from24h}`)
       .then(r => r.json())
       .then(d => {
@@ -99,7 +100,8 @@ socket.on('connections-update', data => {
         if (statsMode) updateStats();
         if (logMode) updateLogView();
       })
-      .catch(e => console.warn('[connections] background 24h fetch failed:', e));
+      .catch(e => console.warn('[connections] background 24h fetch failed:', e))
+      .finally(() => setFetching(-1));
   }
 });
 

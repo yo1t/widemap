@@ -3,6 +3,7 @@ async function fetchConnectionRange(from, to) {
   const params = new URLSearchParams();
   if (from != null) params.set('from', from);
   if (to   != null) params.set('to',   to);
+  setFetching(+1);
   try {
     const res = await apiFetch(`${_BASE}/api/connections?${params}`);
     if (!res.ok) return;
@@ -17,6 +18,8 @@ async function fetchConnectionRange(from, to) {
     if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
   } catch (e) {
     console.error('[connections] fetch failed:', e);
+  } finally {
+    setFetching(-1);
   }
 }
 
