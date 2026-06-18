@@ -244,11 +244,11 @@ function ensureAdminToken() {
   if (!appState.adminToken) {
     appState.adminToken = crypto.randomBytes(24).toString('hex');
     saveConfig();
-    console.log('\n══════════════════════════════════════════════════════════════');
-    console.log('  EgressView admin token (initial):');
-    console.log('  ' + appState.adminToken);
-    console.log('  → API/自動化用トークン（ブラウザはパスワードでログイン）');
-    console.log('══════════════════════════════════════════════════════════════\n');
+    process.stderr.write('\n══════════════════════════════════════════════════════════════\n');
+    process.stderr.write('  EgressView admin token (initial):\n');
+    process.stderr.write('  ' + appState.adminToken + '\n');
+    process.stderr.write('  → API/自動化用トークン（ブラウザはパスワードでログイン）\n');
+    process.stderr.write('══════════════════════════════════════════════════════════════\n\n');
   }
 }
 
@@ -259,12 +259,12 @@ function ensureLoginPassword() {
     appState.authPasswordSalt = salt;
     appState.authPasswordHash = hash;
     saveConfig();
-    console.log('\n══════════════════════════════════════════════════════════════');
-    console.log('  EgressView login password (initial):');
-    console.log('  ' + initial);
-    console.log('  → ブラウザ初回アクセス時にこのパスワードでログインしてください');
-    console.log('    （設定画面からいつでも変更できます）');
-    console.log('══════════════════════════════════════════════════════════════\n');
+    process.stderr.write('\n══════════════════════════════════════════════════════════════\n');
+    process.stderr.write('  EgressView login password (initial):\n');
+    process.stderr.write('  ' + initial + '\n');
+    process.stderr.write('  → ブラウザ初回アクセス時にこのパスワードでログインしてください\n');
+    process.stderr.write('    （設定画面からいつでも変更できます）\n');
+    process.stderr.write('══════════════════════════════════════════════════════════════\n\n');
   }
 }
 
@@ -385,16 +385,15 @@ async function pollYamahaConnections() {
 
 // Security headers — applied to every response
 app.use((req, res, next) => {
+  // Nonce for the BASE_URL bootstrap <script> tag — eliminates 'unsafe-inline' from script-src
+  res.locals.cspNonce = crypto.randomBytes(16).toString('base64');
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
   if (tlsOptions) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  // Minimal CSP: block object/embed injection and restrict base URI.
-  // script-src includes 'unsafe-inline' for the BASE_URL bootstrap snippet;
-  // the real XSS guard is esc() + input validation throughout the codebase.
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' https://d3js.org https://cdn.jsdelivr.net; " +
+    `script-src 'self' 'nonce-${res.locals.cspNonce}' https://d3js.org https://cdn.jsdelivr.net; ` +
     "style-src 'self' 'unsafe-inline'; " +
     "img-src 'self' data:; " +
     "connect-src 'self' wss: https://cdn.jsdelivr.net; " +
@@ -406,7 +405,7 @@ app.use((req, res, next) => {
 
 app.get(['/', '/index.html'], (req, res) => {
   const html = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
-  const baseScript = `<script>window.BASE_URL = '${htmlEscape(SUBPATH)}';</script>`;
+  const baseScript = `<script nonce="${res.locals.cspNonce}">window.BASE_URL = '${htmlEscape(SUBPATH)}';</script>`;
   res.type('html').send(
     html.replace('</head>', baseScript + '\n</head>')
         .replace(/__BASE__/g, htmlEscape(SUBPATH))

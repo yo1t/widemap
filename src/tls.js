@@ -31,11 +31,11 @@ function loadOrCreate(cfg = {}, appRoot = process.cwd()) {
       return null;
     }
     try {
-      logger.info('[tls] Generating self-signed certificate (10-year validity)…');
+      logger.info('[tls] Generating self-signed certificate (2-year validity)…');
       execFileSync('openssl', [
-        'req', '-x509', '-newkey', 'rsa:2048', '-sha256', '-nodes',
+        'req', '-x509', '-newkey', 'rsa:4096', '-sha256', '-nodes',
         '-keyout', keyFile, '-out', certFile,
-        '-days', '3650', '-subj', '/CN=egressview',
+        '-days', '730', '-subj', '/CN=egressview',
       ], { stdio: 'pipe' });
       fs.chmodSync(keyFile, 0o600);
       logger.info(`[tls] Created ${path.basename(certFile)} / ${path.basename(keyFile)}`);

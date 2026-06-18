@@ -510,12 +510,12 @@ function updateSidePanel(clients, data, meshNodes, mainMac) {
     if (c.ipv6Addrs && c.ipv6Addrs.length > 0) {
       badgeHtml += '<span class="proto-badge proto-v6-grey">IPv6</span>';
     }
-    const nodeBadgeText = papNode?.model?.replace(/RT-BE/,'') || 'Main';
+    const nodeBadgeText = esc(papNode?.model?.replace(/RT-BE/,'') || 'Main');
     badgeHtml += `<span class="node-badge" style="background:${nodeColor}22;color:${nodeColor};border:1px solid ${nodeColor}44">${nodeBadgeText}</span>`;
     if (c.deviceFirstSeen && Date.now() - c.deviceFirstSeen < 24 * 60 * 60 * 1000) {
       badgeHtml += `<span class="new-badge">${t('device.new')}</span>`;
     }
-    const metaText = metaParts.length ? ' ' + metaParts.join(' · ') : '';
+    const metaText = metaParts.length ? ' ' + metaParts.map(esc).join(' · ') : '';
     metaEl.innerHTML = badgeHtml + metaText;
     metaEl.className = 'device-meta';
     // Name resolution: DNS / mDNS (omit if same as already-known name)
