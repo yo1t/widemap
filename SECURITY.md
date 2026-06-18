@@ -4,11 +4,9 @@
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Instead, use one of these private channels:
+Please use GitHub private vulnerability reporting:
 
-1. **GitHub private vulnerability reporting** (preferred):
-   [Report a vulnerability](https://github.com/yo1t/egressview/security/advisories/new)
-2. **Email**: yo1@tkywave.com — include "egressview security" in the subject line.
+[Report a vulnerability](https://github.com/yo1t/egressview/security/advisories/new)
 
 You can expect an acknowledgment within a few days. Fixes are released on a best-effort basis; you will be credited in the release notes unless you prefer otherwise.
 
