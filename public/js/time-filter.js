@@ -16,6 +16,8 @@ async function fetchConnectionRange(from, to) {
       dataRangeFrom = from != null ? Math.min(dataRangeFrom, from) : 0;
     }
     if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
+    const notice = document.getElementById('graph-truncated-notice');
+    if (notice) notice.style.display = data.truncated ? '' : 'none';
   } catch (e) {
     console.error('[connections] fetch failed:', e);
   } finally {

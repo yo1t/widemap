@@ -5,6 +5,10 @@ const { Router } = require('express');
 const { parseTimestamp } = require('../utils');
 
 const MAX_LIMIT = 1000;
+// Cap for the no-limit "full graph fetch" path. A synchronous better-sqlite3
+// .all() + JSON.stringify on 100k+ rows blocks the Node.js event loop for
+// several seconds, delaying Socket.IO heartbeats and router polling.
+const MAX_FULL_FETCH = 50_000;
 
 const ALLOWED_SORT_COLS = new Set(['lastSeen', 'src', 'dst', 'dport', 'proto', 'country', 'org']);
 const ALLOWED_SORT_DIRS = new Set(['asc', 'desc']);
@@ -94,12 +98,15 @@ function connectionsRoutes(ctx) {
       return res.json({ connections, total, limit: clampedLimit, offset, serverTime: Date.now() });
     }
 
-    // No limit: return all rows, but still apply sort/filter opts
+    // No-limit path (graph full-fetch). Cap at MAX_FULL_FETCH to prevent
+    // blocking the event loop with synchronous SQLite + JSON.stringify on
+    // large time ranges (100k+ rows freeze heartbeats and router polling).
     const opts = parsePaginationOpts(req.query);
     const connections = attachThreats(
-      history.queryByTimeRangePaged(from, to, null, 0, opts), threatIntel
+      history.queryByTimeRangePaged(from, to, MAX_FULL_FETCH, 0, opts), threatIntel
     );
-    res.json({ connections, serverTime: Date.now() });
+    const truncated = connections.length >= MAX_FULL_FETCH;
+    res.json({ connections, truncated, serverTime: Date.now() });
   });
 
   return router;
