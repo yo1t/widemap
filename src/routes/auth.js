@@ -35,7 +35,7 @@ module.exports = function authRoutes(ctx) {
   // Tracks failed attempts per IP: { count, lockedUntil }
   const loginAttempts = new Map();
   const LOGIN_MAX_FAILS  = 5;
-  const LOGIN_LOCK_MS    = 30_000;
+  const LOGIN_LOCK_MS    = 5 * 60_000;  // 5 minutes
   const LOGIN_WINDOW_MS  = 10 * 60_000;
 
   function checkLoginRateLimit(ip) {
@@ -62,6 +62,11 @@ module.exports = function authRoutes(ctx) {
   }
 
   function clearLoginFails(ip) { loginAttempts.delete(ip); }
+
+  // Reuse the same guard for endpoints that also verify the admin password
+  function checkPasswordRateLimit(ip) { return checkLoginRateLimit(ip); }
+  function recordPasswordFail(ip)     { recordLoginFail(ip); }
+  function clearPasswordFails(ip)     { clearLoginFails(ip); }
 
   // ── Password login → per-device session (P2-23) ────────────────────────────
   router.post('/auth/login', (req, res) => {
@@ -123,10 +128,15 @@ module.exports = function authRoutes(ctx) {
     if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 256) {
       return res.status(400).json({ error: '新しいパスワードは8文字以上で指定してください' });
     }
+    const clientIp = req.ip || req.socket?.remoteAddress || '';
+    const rateLimitErr = checkPasswordRateLimit(clientIp);
+    if (rateLimitErr) return res.status(429).json({ error: rateLimitErr });
     const ok = authPassword.verifyPassword(currentPassword, appState.authPasswordSalt, appState.authPasswordHash);
     if (!ok) {
+      recordPasswordFail(clientIp);
       return setTimeout(() => res.status(401).json({ error: '現在のパスワードが違います' }), 500);
     }
+    clearPasswordFails(clientIp);
     const { salt, hash } = authPassword.hashPassword(newPassword);
     appState.authPasswordSalt = salt;
     appState.authPasswordHash = hash;
@@ -149,11 +159,16 @@ module.exports = function authRoutes(ctx) {
     // a stolen session token must not survive session revocation by minting
     // itself a new API token (same re-auth rule as change-password).
     const { currentPassword } = req.body || {};
+    const clientIp = req.ip || req.socket?.remoteAddress || '';
+    const rateLimitErr = checkPasswordRateLimit(clientIp);
+    if (rateLimitErr) return res.status(429).json({ error: rateLimitErr });
     const ok = authPassword.verifyPassword(currentPassword, appState.authPasswordSalt, appState.authPasswordHash);
     if (!ok) {
+      recordPasswordFail(clientIp);
       logger.warn('[auth] Token regeneration rejected (password check failed)');
       return setTimeout(() => res.status(401).json({ error: '現在のパスワードが違います' }), 500);
     }
+    clearPasswordFails(clientIp);
     const newToken = crypto.randomBytes(24).toString('hex');
     appState.adminToken = newToken;
     saveConfig();
@@ -237,7 +252,7 @@ module.exports = function authRoutes(ctx) {
     const { username, password,
             routerIp: ip,
             yamahaIp: yIp, yamahaUser: yUser, yamahaPass: yPass, yamahaNat: yNat,
-            doAsus, doYamaha } = req.body;
+            doAsus, doYamaha } = req.body || {};
 
     if (doAsus === undefined && doYamaha === undefined) {
       return res.status(400).json({ error: '設定対象を指定してください' });
@@ -273,14 +288,19 @@ module.exports = function authRoutes(ctx) {
 
     // ── Yamaha ──
     if (doYamaha === true) {
-      yamaha.configure({ enabled: true, ip: yIp || yamaha.getIp(), user: yUser || yamaha.getUser(), natDescriptor: yNat || undefined });
-      if (yPass) {
-        persistSecret('yamaha', { ip: yIp || yamaha.getIp(), user: yUser || yamaha.getUser(), pass: yPass, nat: yNat || '100', enabled: true });
-        yamaha.configure({ pass: yPass });
+      try {
+        yamaha.configure({ enabled: true, ip: yIp || yamaha.getIp(), user: yUser || yamaha.getUser(), natDescriptor: yNat || undefined });
+        if (yPass) {
+          persistSecret('yamaha', { ip: yIp || yamaha.getIp(), user: yUser || yamaha.getUser(), pass: yPass, nat: yNat || '100', enabled: true });
+          yamaha.configure({ pass: yPass });
+        }
+        yamaha.reconnect();
+        saveConfig();
+        logger.info(`[auth] Yamaha config updated: ${yamaha.getIp()}`);
+      } catch (err) {
+        logger.error('[auth] Yamaha config failed:', err.message);
+        return res.status(502).json({ success: false, error: 'Yamaha設定の更新に失敗しました' });
       }
-      yamaha.reconnect();
-      saveConfig();
-      logger.info(`[auth] Yamaha config updated: ${yamaha.getIp()}`);
     } else if (doYamaha === false) {
       yamaha.disconnect();
       setLatestConnections([]);

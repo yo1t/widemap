@@ -49,7 +49,7 @@ function configure({ enabled, token, userId, cooldownMinutes, language } = {}) {
   if (typeof enabled === 'boolean') _enabled = enabled;
   if (typeof token === 'string') _token = token;
   if (typeof userId === 'string') _userId = userId;
-  if (typeof cooldownMinutes === 'number' && cooldownMinutes > 0) {
+  if (typeof cooldownMinutes === 'number' && cooldownMinutes > 0 && cooldownMinutes <= 1440) {
     _cooldownMs = cooldownMinutes * 60 * 1000;
   }
   if (language === 'ja' || language === 'en') _language = language;

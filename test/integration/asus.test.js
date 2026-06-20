@@ -34,9 +34,9 @@ function parseClientList(raw) {
       return {
         mac, ip: info.ip || '', name: info.nickName || info.name || mac,
         type: connType, isOnline: info.isOnline === '1' || info.isOnline === 1,
-        rssi: parseInt(info.rssi || '0'),
+        rssi: parseInt(info.rssi || '0', 10),
         curRx: parseFloat(info.curRx || '0'), curTx: parseFloat(info.curTx || '0'),
-        totalRx: parseInt(info.totalRx || '0'), totalTx: parseInt(info.totalTx || '0'),
+        totalRx: parseInt(info.totalRx || '0', 10), totalTx: parseInt(info.totalTx || '0', 10),
         ipMethod: info.ipMethod || 'dhcp', internetMode: info.internetMode || 'allow',
         amesh_papMac: info.amesh_papMac || '', vendor: info.vendor || '',
       };
