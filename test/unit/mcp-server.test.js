@@ -1,7 +1,7 @@
-// Unit tests for mcp-server.js — auth middleware and server construction
+// Unit tests for mcp-server.js — auth middleware, apiPost helper, and server construction
 'use strict';
 
-const { describe, it, before } = require('node:test');
+const { describe, it, before, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 // Set env vars before requiring to prevent startup side-effects
@@ -10,7 +10,7 @@ process.env.EGRESSVIEW_TOKEN = process.env.EGRESSVIEW_TOKEN || 'test-egressview-
 // MCP_PORT must be unset so the module does not try to bind a port
 delete process.env.MCP_PORT;
 
-const { _createAuthMiddleware, _buildMcpServer } = require('../../mcp-server');
+const { _createAuthMiddleware, _buildMcpServer, _apiPost } = require('../../mcp-server');
 
 // ─── createAuthMiddleware ─────────────────────────────────────────────────────
 
@@ -91,6 +91,65 @@ describe('mcp-server: createAuthMiddleware', () => {
     let nextCalled = false;
     mw(makeReq({ 'x-admin-token': mcpToken }), res, () => { nextCalled = true; });
     assert.equal(nextCalled, true);
+  });
+});
+
+// ─── apiPost helper ───────────────────────────────────────────────────────────
+
+describe('mcp-server: apiPost', () => {
+  let originalFetch;
+
+  before(() => { originalFetch = globalThis.fetch; });
+
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  function mockFetch(status, body) {
+    globalThis.fetch = async () => ({
+      ok:   status >= 200 && status < 300,
+      status,
+      json: async () => body,
+    });
+  }
+
+  it('sends POST with JSON body and X-Admin-Token header', async () => {
+    let capturedUrl, capturedOpts;
+    globalThis.fetch = async (url, opts) => {
+      capturedUrl  = url;
+      capturedOpts = opts;
+      return { ok: true, status: 200, json: async () => ({ success: true }) };
+    };
+    await _apiPost('/notes', { ip: '192.168.1.1', note: 'test' });
+    assert.ok(capturedUrl.endsWith('/api/notes'), 'should POST to /api/notes');
+    assert.equal(capturedOpts.method, 'POST');
+    assert.equal(capturedOpts.headers['Content-Type'], 'application/json');
+    assert.ok(capturedOpts.headers['X-Admin-Token'], 'should include auth token');
+    assert.deepEqual(JSON.parse(capturedOpts.body), { ip: '192.168.1.1', note: 'test' });
+  });
+
+  it('returns parsed JSON on success', async () => {
+    mockFetch(200, { success: true });
+    const result = await _apiPost('/notes', {});
+    assert.deepEqual(result, { success: true });
+  });
+
+  it('throws on non-2xx response', async () => {
+    mockFetch(400, { error: 'bad request' });
+    await assert.rejects(
+      () => _apiPost('/notes', {}),
+      /returned 400/
+    );
+  });
+
+  it('throws on non-JSON response', async () => {
+    globalThis.fetch = async () => ({
+      ok:   true,
+      status: 200,
+      json: async () => { throw new SyntaxError('not json'); },
+    });
+    await assert.rejects(
+      () => _apiPost('/notes', {}),
+      /non-JSON response/
+    );
   });
 });
 

@@ -69,6 +69,20 @@ async function api(path, params = {}) {
   }
 }
 
+async function apiPost(path, body = {}) {
+  const res = await fetch(`${BASE}/api${path}`, {
+    method:  'POST',
+    headers: { 'X-Admin-Token': TOKEN, 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API POST ${path} returned ${res.status}`);
+  try {
+    return await res.json();
+  } catch {
+    throw new Error(`API POST ${path} returned non-JSON response`);
+  }
+}
+
 // ─── Period helpers ───────────────────────────────────────────────────────────
 
 const PERIOD_MS = {
@@ -314,6 +328,58 @@ function buildMcpServer() {
     }
   );
 
+  // ⑩ Get device notes
+  server.tool(
+    'get_device_notes',
+    'Returns memo notes attached to devices. Omit src to list all devices that have a note. Pass a source IP to get that device\'s note.',
+    {
+      src: z.string().optional().describe('Source IP address (omit for all devices with notes)'),
+    },
+    async ({ src }) => {
+      const data = await api('/devices');
+      const devs = data.devices ?? [];
+      if (src) {
+        const dev = devs.find(d => d.ip === src);
+        if (!dev) return ok({ src, found: false, note: null });
+        return ok({
+          src,
+          found:     true,
+          deviceId:  dev.deviceId  || null,
+          mac:       dev.mac       || null,
+          vendor:    dev.vendor    || null,
+          dnsName:   dev.dnsName   || dev.mdnsName || null,
+          note:      dev.note      || null,
+        });
+      }
+      const withNotes = devs
+        .filter(d => d.note)
+        .map(d => ({
+          src:      d.ip,
+          deviceId: d.deviceId || null,
+          mac:      d.mac      || null,
+          vendor:   d.vendor   || null,
+          dnsName:  d.dnsName  || d.mdnsName || null,
+          note:     d.note,
+        }));
+      return ok({ count: withNotes.length, devices: withNotes });
+    }
+  );
+
+  // ⑪ Set device note
+  server.tool(
+    'set_device_note',
+    'Sets or updates the memo note for a device identified by its source IP address. Pass an empty string to delete the note.',
+    {
+      src:  z.string().describe('Source IP address of the device'),
+      note: z.string().max(500).describe('Memo text to save (empty string deletes the note)'),
+    },
+    async ({ src, note }) => {
+      await apiPost('/notes', { ip: src, note });
+      const trimmed = note.trim();
+      return ok({ src, note: trimmed || null, deleted: !trimmed });
+    }
+  );
+
   return server;
 }
 
@@ -394,3 +460,4 @@ if (require.main === module) {
 // ─── Test exports (only when required, not when run directly) ─────────────────
 module.exports._createAuthMiddleware = createAuthMiddleware;
 module.exports._buildMcpServer       = buildMcpServer;
+module.exports._apiPost              = apiPost;
