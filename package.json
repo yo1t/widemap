@@ -31,6 +31,7 @@
   "main": "server.js",
   "files": [
     "server.js",
+    "mcp-server.js",
     "public/",
     "src/",
     "scripts/",
@@ -61,16 +62,19 @@
     "security:audit": "npm audit --omit=dev --audit-level=moderate",
     "security:secrets": "node scripts/secret-scan.js",
     "security:check": "npm run security:audit && npm run security:secrets",
-    "release:check": "npm run test:unit && npm run security:check && npm pack --dry-run"
+    "release:check": "npm run test:unit && npm run security:check && npm pack --dry-run",
+    "mcp": "node mcp-server.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "axios": "^1.7.0",
     "better-sqlite3": "^12.10.0",
     "bonjour-service": "^1.2.1",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",
     "socket.io": "^4.7.0",
-    "ssh2": "^1.17.0"
+    "ssh2": "^1.17.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
