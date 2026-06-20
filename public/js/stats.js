@@ -11,6 +11,7 @@ var stFlatParticles = [], stFlatAnimId = null;
 var stFlatInitScale = null, stFlatInitTranslate = null;
 var stFlatZoom = 1, stFlatPanX = 0, stFlatPanY = 0;
 var stSelIp = null; // active device filter (null = all)
+var stMapPointOverride = null;
 const ST_SPEEDS = [0.04, 0.08, 0.16, 0.32, 0.64];
 var stSpeedIdx = 2; // default: ST_SPEEDS[2] = 0.16
 
@@ -75,7 +76,7 @@ function stRenderGlobeData() {
   const rot = stGlobeProj.rotate();
   const center = [-rot[0], -rot[1]];
   const near = ll => d3.geoDistance(ll, center) < Math.PI / 2 - 0.02;
-  const pts = buildMapPoints().filter(p => !stSelIp || p.srcs.has(stSelIp));
+  const pts = (stMapPointOverride || buildMapPoints()).filter(p => !stSelIp || p.srcs.has(stSelIp));
   const maxS = Math.max(2, ...pts.map(d => d.totalSessions));
   stColorScale = d3.scaleSequentialLog().domain([1, maxS]).interpolator(d3.interpolate('#6d28d9', '#f97316'));
   const rScale = d => 2 + Math.sqrt(d.totalSessions / maxS) * 5;
@@ -160,7 +161,7 @@ function stRenderFlatData() {
   stStopFlatAnim();
   const home = getHomeCoord();
   const hxy = stFlatProj([home.lon, home.lat]);
-  const pts = buildMapPoints().filter(p => !stSelIp || p.srcs.has(stSelIp));
+  const pts = (stMapPointOverride || buildMapPoints()).filter(p => !stSelIp || p.srcs.has(stSelIp));
   const maxS = Math.max(2, ...pts.map(d => d.totalSessions));
   const rScale = d => 4 + Math.sqrt(d.totalSessions / maxS) * 10;
   const ballisticD = (a, b) => {
@@ -347,8 +348,9 @@ function initStatsMaps(resetRotation) {
   });
 }
 
-function updateStatsMaps(selIp) {
-  stSelIp = selIp ?? null;
+function updateStatsMaps(selIp, mapPoints) {
+  stMapPointOverride = mapPoints || null;
+  stSelIp = mapPoints ? null : (selIp ?? null);
   if (!stGlobeSvg) { initStatsMaps(); return; }
   stRenderGlobeData();
   stRenderFlatData();
@@ -370,36 +372,111 @@ document.querySelectorAll('.chart-mode-btn').forEach(btn => {
   });
 });
 
-function updateStats() {
-  if (!statsMode) return;
-  const tlSvg  = document.getElementById('chart-timeline');
-  const barSvg = document.getElementById('chart-bar');
-  const subtitle = document.getElementById('stats-subtitle');
-  const empty  = document.getElementById('stats-empty');
+let statsSummaryGeneration = 0;
+let statsSummaryCache = { key: null, at: 0, data: null };
 
-  // Selected node and period
+function getStatsSelection() {
   const sel = selectedMac;
   const selNode = sel ? nodes.find(n => n.id === sel) : null;
-  const selIp   = selNode?.client?.ip || null;
+  return selNode?.client?.ip || null;
+}
 
-  // Period label
-  const filterLabel = document.querySelector('#time-filter-select option:checked')?.textContent || '';
-  subtitle.textContent = selIp
-    ? `${t('stats.subtitle.device')}: ${selIp} / ${t('stats.subtitle.period')}: ${filterLabel}`
-    : `${t('stats.subtitle.all')} / ${t('stats.subtitle.period')}: ${filterLabel}`;
+function setStatsEmpty(isEmpty, selIp) {
+  const empty = document.getElementById('stats-empty');
+  empty.style.display = isEmpty ? 'block' : 'none';
+  document.getElementById('stats-charts').style.display = isEmpty ? 'none' : 'grid';
+  if (isEmpty) updateStatsMaps(selIp, []);
+}
 
+function statsTargetRows(summary) {
+  const rows = summary.byTarget && summary.byTarget.length
+    ? summary.byTarget
+    : (summary.byDst || []).map(r => ({
+      key: r.org || r.dstHost || r.dst,
+      label: r.org || r.dstHost || r.dst,
+      count: r.count,
+    }));
+  return rows.map(r => ({
+    key: r.key || r.label,
+    label: r.label || r.key,
+    count: r.count || 0,
+  })).filter(r => r.key && r.count > 0);
+}
+
+function appSlicesFromSummary(groups, topN) {
+  const unknownLabel = t('stats.app.unknown');
+  const otherLabel = t('stats.legend.other');
+  const counts = new Map();
+  for (const g of groups || []) {
+    const app = guessApp(g.dport, g.proto, g.dstHost) || unknownLabel;
+    counts.set(app, (counts.get(app) || 0) + (g.count || 0));
+  }
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const top = sorted.slice(0, topN);
+  const rest = sorted.slice(topN).reduce((sum, [, count]) => sum + count, 0);
+  if (rest > 0) top.push([otherLabel, rest]);
+  return top;
+}
+
+function mapPointsFromSummary(summary) {
+  return (summary.byLocation || [])
+    .filter(r => r.lat != null && r.lon != null)
+    .map(r => ({
+      key: r.key || r.org,
+      org: r.org || r.key,
+      lat: Number(r.lat),
+      lon: Number(r.lon),
+      city: r.city || '',
+      country: r.country || '',
+      srcs: new Map(),
+      maxTtl: r.maxTtl || 0,
+      threat: false,
+      totalSessions: r.totalSessions || 0,
+      freshness: Math.max(0.15, Math.min(1.0, (r.maxTtl || 0) / 300)),
+    }));
+}
+
+function renderStatsSummary(summary, selIp) {
+  const targetRows = statsTargetRows(summary);
+  if (!targetRows.length && !(summary.total > 0)) {
+    setStatsEmpty(true, selIp);
+    return;
+  }
+  setStatsEmpty(false, selIp);
+
+  const isMobile = window.matchMedia('(max-width: 768px)').matches;
+  const sortedTargets = targetRows.map(r => [r.key, r.count]);
+  const topN = isMobile ? 5 : 10;
+  const topTargets = sortedTargets.slice(0, topN).map(([key]) => key);
+  drawBarChart(isMobile ? sortedTargets.slice(0, 15) : sortedTargets);
+
+  const buckets = summary.buckets || 60;
+  const fromT = summary.from ?? Date.now();
+  const toT = summary.to ?? Date.now();
+  const bw = Math.max(1, (Math.max(toT, fromT + 1) - fromT) / buckets);
+  const series = new Map();
+  for (const key of topTargets) series.set(key, new Array(buckets).fill(0));
+  series.set('__other__', new Array(buckets).fill(0));
+  for (const row of summary.timeline || []) {
+    const bucket = Math.max(0, Math.min(buckets - 1, Number(row.bucket) || 0));
+    const arr = series.get(row.key) || series.get('__other__');
+    arr[bucket] += row.count || 0;
+  }
+  drawTimeline(series, fromT, toT, buckets, bw, topTargets);
+  drawAppPieChart(null, appSlicesFromSummary(summary.appGroups, 8));
+  updateStatsMaps(selIp, mapPointsFromSummary(summary));
+}
+
+function renderStatsFromLocalConnections(selIp) {
   // Period-filtered connection data
   let conns = getFilteredConnections();
   if (selIp) conns = conns.filter(c => c.src === selIp);
 
   if (!conns.length) {
-    empty.style.display = 'block';
-    document.getElementById('stats-charts').style.display = 'none';
-    updateStatsMaps(selIp);
+    setStatsEmpty(true, selIp);
     return;
   }
-  empty.style.display = 'none';
-  document.getElementById('stats-charts').style.display = 'grid';
+  setStatsEmpty(false, selIp);
 
   // ── Total sessions per destination ──────────────────────
   const isMobile = window.matchMedia('(max-width: 768px)').matches;
@@ -409,25 +486,21 @@ function updateStats() {
     orgCounts.set(key, (orgCounts.get(key) || 0) + 1);
   }
   const sortedOrgs = [...orgCounts.entries()].sort((a,b) => b[1] - a[1]);
-  // On mobile the screen is narrow, so split only the top 5 series; others go into "Other"
   const topN = isMobile ? 5 : 10;
   const topOrgs = sortedOrgs.slice(0, topN).map(e => e[0]);
 
-  // Bar chart: top 15 on mobile, all on desktop (container scrolls)
   drawBarChart(isMobile ? sortedOrgs.slice(0, 15) : sortedOrgs);
 
   // ── Time-series buckets ──────────────────────────────
-  // Decide bucket width from the period
   const tr = getTimeRange();
   const now = Date.now() + serverTimeOffset;
   const fromT = tr.from ?? Math.min(...conns.map(c => c.firstSeen || c.lastSeen || now));
   const toT   = tr.to   ?? now;
   const range = Math.max(toT - fromT, 60_000);
-  const buckets = 60; // number of buckets
+  const buckets = 60;
   const bw = range / buckets;
 
-  // Aggregate per org × bucket
-  const series = new Map(); // org -> Array<number>
+  const series = new Map();
   for (const o of topOrgs) series.set(o, new Array(buckets).fill(0));
   series.set('__other__', new Array(buckets).fill(0));
   for (const c of conns) {
@@ -443,6 +516,56 @@ function updateStats() {
   updateStatsMaps(selIp);
 }
 
+async function fetchStatsSummary(selIp) {
+  const { from, to } = getTimeRange();
+  const params = new URLSearchParams();
+  if (from != null) params.set('from', from);
+  if (to != null) params.set('to', to);
+  if (selIp) params.set('src', selIp);
+  params.set('buckets', '60');
+  const key = params.toString();
+  const now = Date.now();
+  if (statsSummaryCache.key === key && statsSummaryCache.data && now - statsSummaryCache.at < 5000) {
+    return statsSummaryCache.data;
+  }
+  setFetching(+1);
+  try {
+    const res = await apiFetch(`${_BASE}/api/connections/summary?${params}`);
+    if (!res.ok) throw new Error(`summary failed: ${res.status}`);
+    const data = await res.json();
+    if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
+    statsSummaryCache = { key, at: Date.now(), data };
+    return data;
+  } finally {
+    setFetching(-1);
+  }
+}
+
+async function updateStats() {
+  if (!statsMode) return;
+  const subtitle = document.getElementById('stats-subtitle');
+
+  // Selected node and period
+  const selIp = getStatsSelection();
+
+  // Period label
+  const filterLabel = document.querySelector('#time-filter-select option:checked')?.textContent || '';
+  subtitle.textContent = selIp
+    ? `${t('stats.subtitle.device')}: ${selIp} / ${t('stats.subtitle.period')}: ${filterLabel}`
+    : `${t('stats.subtitle.all')} / ${t('stats.subtitle.period')}: ${filterLabel}`;
+
+  const generation = ++statsSummaryGeneration;
+  try {
+    const summary = await fetchStatsSummary(selIp);
+    if (generation !== statsSummaryGeneration || !statsMode) return;
+    renderStatsSummary(summary, selIp);
+  } catch (e) {
+    console.error('[stats] summary fetch failed:', e);
+    if (generation !== statsSummaryGeneration || !statsMode) return;
+    renderStatsFromLocalConnections(selIp);
+  }
+}
+
 // ─── App distribution pie chart (cyber style) ────────────────────────────────
 
 const _PIE_CYBER_COLORS = [
@@ -450,7 +573,7 @@ const _PIE_CYBER_COLORS = [
   '#f43f5e', '#fbbf24', '#38bdf8', '#ec4899',
 ];
 
-function drawAppPieChart(conns) {
+function drawAppPieChart(conns, precomputedSlices) {
   const cell = document.getElementById('st-app-pie');
   if (!cell) return;
   const svg = d3.select('#st-app-pie-svg');
@@ -463,7 +586,7 @@ function drawAppPieChart(conns) {
   svg.attr('viewBox', `0 0 ${w} ${h}`);
   svg.append('rect').attr('width', w).attr('height', h).attr('fill', '#050a14');
 
-  const slices  = _buildAppSlices(conns, 8, t('stats.app.unknown'), t('stats.legend.other'));
+  const slices  = precomputedSlices || _buildAppSlices(conns || [], 8, t('stats.app.unknown'), t('stats.legend.other'));
   const total   = slices.reduce((s, [, v]) => s + v, 0);
   const otherLbl = t('stats.legend.other');
   const isOther = (i) => i === slices.length - 1 && slices.length > 1 && slices[i][0] === otherLbl;

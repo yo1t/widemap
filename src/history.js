@@ -426,13 +426,25 @@ function countByTimeRange(from, to, { filters = {} } = {}) {
   return row ? row.cnt : 0;
 }
 
-function summarizeByTimeRange(from, to) {
+function summarizeByTimeRange(from, to, { src = null, buckets = 60 } = {}) {
   if (!db) return { byDst: [], byDevice: [] };
   const conditions = [];
   const params = [];
   if (from != null) { conditions.push('lastSeen >= ?'); params.push(from); }
   if (to   != null) { conditions.push('lastSeen <= ?'); params.push(to); }
+  if (src  != null) { conditions.push('src = ?');       params.push(src); }
   const where = conditions.length ? ' WHERE ' + conditions.join(' AND ') : '';
+  const targetExpr = "COALESCE(NULLIF(org, ''), NULLIF(dstHost, ''), dst)";
+  const countRow = db.prepare(
+    `SELECT COUNT(*) as total, MIN(lastSeen) as minLastSeen, MAX(lastSeen) as maxLastSeen
+     FROM connections${where}`
+  ).get(...params) || {};
+  const total = countRow.total || 0;
+  const rangeFrom = from ?? countRow.minLastSeen ?? Date.now();
+  const rangeTo = to ?? countRow.maxLastSeen ?? Date.now();
+  const bucketCount = Math.max(1, Math.min(240, Number(buckets) || 60));
+  const bucketMs = Math.max(1, (Math.max(rangeTo, rangeFrom + 1) - rangeFrom) / bucketCount);
+
   const byDst = db.prepare(
     `SELECT dst, dstHost, country, org,
             COUNT(*) as count, MIN(firstSeen) as firstSeen, MAX(lastSeen) as lastSeen
@@ -445,7 +457,49 @@ function summarizeByTimeRange(from, to) {
      FROM connections${where}
      GROUP BY src ORDER BY count DESC LIMIT 200`
   ).all(...params);
-  return { byDst, byDevice };
+  const byTarget = db.prepare(
+    `SELECT ${targetExpr} as key, ${targetExpr} as label,
+            COUNT(*) as count, MIN(firstSeen) as firstSeen, MAX(lastSeen) as lastSeen
+     FROM connections${where}
+     GROUP BY key ORDER BY count DESC LIMIT 1000`
+  ).all(...params);
+  const byLocation = db.prepare(
+    `SELECT ${targetExpr} as key, ${targetExpr} as org,
+            country, city, lat, lon,
+            COUNT(*) as totalSessions, COUNT(DISTINCT src) as srcCount,
+            MAX(ttl) as maxTtl, MIN(firstSeen) as firstSeen, MAX(lastSeen) as lastSeen
+     FROM connections${where}${where ? ' AND' : ' WHERE'} lat IS NOT NULL AND lon IS NOT NULL
+     GROUP BY key, lat, lon ORDER BY totalSessions DESC LIMIT 500`
+  ).all(...params);
+  const appGroups = db.prepare(
+    `SELECT dport, proto, COALESCE(NULLIF(dstHost, ''), dst) as dstHost,
+            COUNT(*) as count
+     FROM connections${where}
+     GROUP BY dport, proto, dstHost ORDER BY count DESC LIMIT 1000`
+  ).all(...params);
+  const timeline = db.prepare(
+    `SELECT ${targetExpr} as key,
+            CASE
+              WHEN lastSeen < ? THEN 0
+              WHEN lastSeen >= ? THEN ?
+              ELSE CAST((lastSeen - ?) / ? AS INTEGER)
+            END as bucket,
+            COUNT(*) as count
+     FROM connections${where}
+     GROUP BY key, bucket ORDER BY bucket ASC, count DESC`
+  ).all(rangeFrom, rangeTo, bucketCount - 1, rangeFrom, bucketMs, ...params);
+  return {
+    byDst,
+    byDevice,
+    byTarget,
+    byLocation,
+    appGroups,
+    timeline,
+    total,
+    buckets: bucketCount,
+    from: rangeFrom,
+    to: rangeTo,
+  };
 }
 
 function logNotification(entry, type, slackSent) {

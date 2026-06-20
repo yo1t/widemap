@@ -208,19 +208,24 @@ describe('connections route: GET /connections pagination', () => {
 // ─── Summary route handler ────────────────────────────────────────────────────
 
 describe('connections route: GET /connections/summary', () => {
+  let lastSummaryArgs;
   function makeHistory() {
     return {
       queryByTimeRange:       () => [],
       queryByTimeRangePaged:  () => [],
       countByTimeRange:       () => 0,
-      summarizeByTimeRange:   () => ({
-        byDst:    [{ dst: '10.0.0.1', count: 5 }],
-        byDevice: [{ src: '192.168.1.1', count: 5 }],
-      }),
+      summarizeByTimeRange:   (...args) => {
+        lastSummaryArgs = args;
+        return {
+          byDst:    [{ dst: '10.0.0.1', count: 5 }],
+          byDevice: [{ src: '192.168.1.1', count: 5 }],
+        };
+      },
     };
   }
 
   function callSummaryRoute(query = {}) {
+    lastSummaryArgs = null;
     const connectionsRoutes = require('../../src/routes/connections');
     const router = connectionsRoutes({
       requireAdmin: (_req, _res, next) => next(),
@@ -249,6 +254,17 @@ describe('connections route: GET /connections/summary', () => {
 
   it('returns 400 for invalid from timestamp', () => {
     const res = callSummaryRoute({ from: 'bad' });
+    assert.equal(res._status, 400);
+  });
+
+  it('passes src and buckets options to summary aggregation', () => {
+    const res = callSummaryRoute({ src: '192.168.1.10', buckets: '120' });
+    assert.equal(res._status, 200);
+    assert.deepEqual(lastSummaryArgs[2], { src: '192.168.1.10', buckets: 120 });
+  });
+
+  it('returns 400 for invalid buckets', () => {
+    const res = callSummaryRoute({ buckets: 'bad' });
     assert.equal(res._status, 400);
   });
 });

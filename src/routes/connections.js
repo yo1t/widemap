@@ -71,7 +71,15 @@ function connectionsRoutes(ctx) {
     if (e1) return;
     const { ts: to, err: e2 } = parseTimestampParam(req.query.to, 'to', res);
     if (e2) return;
-    const summary = history.summarizeByTimeRange(from, to);
+    const bucketsRaw = req.query.buckets;
+    let buckets = 60;
+    if (bucketsRaw != null && bucketsRaw !== '') {
+      if (!/^\d+$/.test(bucketsRaw))
+        return res.status(400).json({ error: 'invalid "buckets" parameter' });
+      buckets = Math.max(1, Math.min(240, parseInt(bucketsRaw, 10)));
+    }
+    const src = req.query.src || null;
+    const summary = history.summarizeByTimeRange(from, to, { src, buckets });
     res.json({ ...summary, serverTime: Date.now() });
   });
 

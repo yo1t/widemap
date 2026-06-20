@@ -529,6 +529,43 @@ describe('summarizeByTimeRange', () => {
     assert.ok(entry.firstSeen <= t - 2000, 'firstSeen should be the earliest');
     assert.ok(entry.lastSeen  >= t - 1000, 'lastSeen should be the latest');
   });
+
+  it('returns full stats aggregates for target, app, location, and timeline', () => {
+    const t = Date.now();
+    insert({
+      src: '192.168.1.10', dst: '10.0.0.1', dstHost: 's3.amazonaws.com',
+      org: 'Amazon.com, Inc.', dport: 443, proto: 'TCP',
+      country: 'US', city: 'Seattle', lat: 47.6, lon: -122.3,
+      firstSeen: t - 10_000, lastSeen: t - 10_000,
+    });
+    insert({
+      src: '192.168.1.20', dst: '10.0.0.2', dstHost: 'www.google.com',
+      org: 'Google LLC', dport: 443, proto: 'TCP',
+      country: 'US', city: 'Mountain View', lat: 37.4, lon: -122.1,
+      firstSeen: t - 5_000, lastSeen: t - 5_000,
+    });
+
+    const result = history.summarizeByTimeRange(t - 20_000, t, { buckets: 4 });
+
+    assert.equal(result.total, 2);
+    assert.equal(result.buckets, 4);
+    assert.ok(result.byTarget.some(r => r.key === 'Amazon.com, Inc.' && r.count === 1));
+    assert.ok(result.byLocation.some(r => r.org === 'Google LLC' && r.totalSessions === 1));
+    assert.ok(result.appGroups.some(r => r.dport === 443 && r.proto === 'TCP' && r.count >= 1));
+    assert.equal(result.timeline.reduce((sum, r) => sum + r.count, 0), 2);
+  });
+
+  it('summary can be filtered to one source IP', () => {
+    const t = Date.now();
+    insert({ src: '192.168.1.10', dst: '10.0.0.1', lastSeen: t - 1000, firstSeen: t - 1000 });
+    insert({ src: '192.168.1.20', dst: '10.0.0.2', lastSeen: t - 1000, firstSeen: t - 1000 });
+
+    const result = history.summarizeByTimeRange(t - 2000, t, { src: '192.168.1.10' });
+
+    assert.equal(result.total, 1);
+    assert.equal(result.byDevice.length, 1);
+    assert.equal(result.byDevice[0].src, '192.168.1.10');
+  });
 });
 
 // ─── queryByTimeRangePaged: sort options ──────────────────────────────────────
