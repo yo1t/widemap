@@ -1,4 +1,5 @@
 {
+  "port": 3000,
   "yamaha": {
     "ip": "192.168.x.x",
     "user": "admin",

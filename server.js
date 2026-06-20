@@ -51,7 +51,8 @@ const notificationLogRoutes = require('./src/routes/notification-log');
 const SUBPATH           = (process.env.SUBPATH || '').replace(/\/$/, '');
 const DEFAULT_ROUTER_IP = process.env.ROUTER_IP   || '192.168.1.1';
 const POLL_INTERVAL     = parseInt(process.env.POLL_INTERVAL_MS || '60000');
-const PORT              = parseInt(process.env.PORT || '3000');
+// PORT is resolved after the early config read below (env > config file > 3000)
+let PORT = parseInt(process.env.PORT || '3000');
 const CONFIG_FILE       = require('./src/config').DEFAULT_CONFIG_FILE;
 
 // Demo mode: pre-seeds sample data and uses a fixed token so the app can be
@@ -120,6 +121,10 @@ let tlsOptions = null;
   if (early.https?.enabled) {
     tlsOptions = tls.loadOrCreate(early.https, __dirname);
     if (!tlsOptions) console.error('[tls] HTTPS requested but unavailable — falling back to HTTP');
+  }
+  // Allow port to be set in config file; env var takes precedence
+  if (!process.env.PORT && Number.isFinite(parseInt(early.port))) {
+    PORT = parseInt(early.port);
   }
 }
 const server = tlsOptions ? https.createServer(tlsOptions, app) : http.createServer(app);

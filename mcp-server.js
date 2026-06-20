@@ -1,35 +1,48 @@
 'use strict';
-// EgressView MCP Server
-// Exposes network traffic data to AI agents via the Model Context Protocol.
-// Run: EGRESSVIEW_DB=/path/to/.egressview.db node mcp-server.js
+// EgressView MCP Server — REST API wrapper
+// Runs locally; calls the remote EgressView server via HTTP.
+// No direct DB access — works with EgressView running on any host.
+//
+// Required env vars:
+//   EGRESSVIEW_URL   — e.g. http://your-ec2-ip:3002  (no trailing slash)
+//   EGRESSVIEW_TOKEN — admin token shown on first startup
 //
 // Claude Desktop config (~/.claude/claude_desktop_config.json):
 //   { "mcpServers": { "egressview": {
 //       "command": "node",
 //       "args": ["/absolute/path/to/egressview/mcp-server.js"],
-//       "env": { "EGRESSVIEW_DB": "/absolute/path/to/.egressview.db" }
+//       "env": {
+//         "EGRESSVIEW_URL":   "http://your-ec2-ip:3002",
+//         "EGRESSVIEW_TOKEN": "your-admin-token"
+//       }
 //   }}}
 
-const path = require('path');
-const { McpServer }          = require('@modelcontextprotocol/sdk/server/mcp.js');
+const { McpServer }            = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StdioServerTransport } = require('@modelcontextprotocol/sdk/server/stdio.js');
 const { z } = require('zod');
 
-const history    = require('./src/history.js');
-const devices    = require('./src/devices.js');
-const threatIntel = require('./src/threat-intel.js');
+const BASE  = (process.env.EGRESSVIEW_URL  || 'http://localhost:3000').replace(/\/$/, '');
+const TOKEN = process.env.EGRESSVIEW_TOKEN || '';
 
-const DB_PATH = process.env.EGRESSVIEW_DB
-  || path.join(__dirname, '.egressview.db');
+if (!TOKEN) {
+  process.stderr.write('[egressview-mcp] WARNING: EGRESSVIEW_TOKEN is not set — API calls will fail\n');
+}
 
-// Open DB (WAL mode allows concurrent reads alongside the main server)
-history._initForTest(DB_PATH);
-devices.initDb(DB_PATH);
+// ─── HTTP helper ─────────────────────────────────────────────────────────────
 
-// Load threat intel feeds from on-disk cache; don't block startup
-threatIntel.fetchThreatIntel().catch(() => {});
+async function api(path, params = {}) {
+  const url = new URL(`${BASE}/api${path}`);
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
+  }
+  const res = await fetch(url.toString(), {
+    headers: { 'X-Admin-Token': TOKEN },
+  });
+  if (!res.ok) throw new Error(`API ${path} returned ${res.status}`);
+  return res.json();
+}
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Period helpers ───────────────────────────────────────────────────────────
 
 const PERIOD_MS = {
   '1h':  3_600_000,
@@ -51,12 +64,6 @@ function tsToIso(ts) {
   return ts ? new Date(ts).toISOString() : null;
 }
 
-function threatLevel(dst, dstHost) {
-  const t = threatIntel.matchThreatIntel(dst, dstHost || dst);
-  if (!t) return 'safe';
-  return t.confidence === 'low' ? 'warn' : 'danger';
-}
-
 function ok(obj) {
   return { content: [{ type: 'text', text: JSON.stringify(obj, null, 2) }] };
 }
@@ -68,62 +75,53 @@ const server = new McpServer({
   version: require('./package.json').version,
 });
 
-// ① Threat summary ─────────────────────────────────────────────────────────────
+// ① Threat summary
 server.tool(
   'get_threat_summary',
-  'Counts sessions classified as safe / warn / danger for the given time period. ' +
-  'Uses server-side GROUP BY for accuracy regardless of dataset size.',
+  'Counts sessions classified as safe / warn / danger for the given time period.',
   { period: PERIOD_ENUM.default('24h').describe('Time window') },
-  ({ period }) => {
+  async ({ period }) => {
     const { from, to } = periodRange(period);
-    const groups = history.groupDstByTimeRange(from, to);
-    let safe = 0, warn = 0, danger = 0;
-    for (const { dst, dstHost, cnt } of groups) {
-      const lvl = threatLevel(dst, dstHost);
-      if (lvl === 'safe') safe += cnt;
-      else if (lvl === 'warn') warn += cnt;
-      else danger += cnt;
-    }
-    return ok({ period, safe, warn, danger, total: safe + warn + danger });
+    const data = await api('/connections/threat-counts', { from, to });
+    return ok({ period, safe: data.safe, warn: data.warn, danger: data.danger, total: data.safe + data.warn + data.danger });
   }
 );
 
-// ② Traffic summary ────────────────────────────────────────────────────────────
+// ② Traffic summary
 server.tool(
   'get_traffic_summary',
   'Returns total session count, unique destination count, and unique device count for the period.',
   { period: PERIOD_ENUM.default('24h').describe('Time window') },
-  ({ period }) => {
+  async ({ period }) => {
     const { from, to } = periodRange(period);
-    const total   = history.countByTimeRange(from, to);
-    const summary = history.summarizeByTimeRange(from, to);
+    const data = await api('/connections/summary', { from, to, buckets: 1 });
     return ok({
       period,
-      totalSessions:      total,
-      uniqueDestinations: summary.byDst.length,
-      uniqueDevices:      summary.byDevice.length,
+      totalSessions:      data.total ?? 0,
+      uniqueDestinations: data.byDst?.length    ?? 0,
+      uniqueDevices:      data.byDevice?.length ?? 0,
     });
   }
 );
 
-// ③ Top destinations ───────────────────────────────────────────────────────────
+// ③ Top destinations
 server.tool(
   'get_top_destinations',
   'Returns the most frequently contacted destinations, ranked by session count, with country, org, and threat level.',
   {
     period: PERIOD_ENUM.default('24h'),
-    limit:  z.number().int().min(1).max(100).default(20).describe('Max rows to return'),
+    limit:  z.number().int().min(1).max(100).default(20).describe('Max rows'),
   },
-  ({ period, limit }) => {
+  async ({ period, limit }) => {
     const { from, to } = periodRange(period);
-    const { byDst } = history.summarizeByTimeRange(from, to);
-    const rows = byDst.slice(0, limit).map(d => ({
+    const data = await api('/connections/summary', { from, to, buckets: 1 });
+    const rows = (data.byDst ?? []).slice(0, limit).map(d => ({
       dst:       d.dst,
       host:      d.dstHost  || null,
       country:   d.country  || null,
       org:       d.org      || null,
       sessions:  d.count,
-      threat:    threatLevel(d.dst, d.dstHost),
+      threat:    d.threat   || null,
       firstSeen: tsToIso(d.firstSeen),
       lastSeen:  tsToIso(d.lastSeen),
     }));
@@ -131,7 +129,7 @@ server.tool(
   }
 );
 
-// ④ Device traffic ─────────────────────────────────────────────────────────────
+// ④ Device traffic
 server.tool(
   'get_device_traffic',
   'Per-device traffic. Omit src to list all devices. Pass src IP to get that device\'s top destinations.',
@@ -140,21 +138,21 @@ server.tool(
     src:    z.string().optional().describe('Source IP (omit for all devices)'),
     limit:  z.number().int().min(1).max(50).default(10),
   },
-  ({ period, src, limit }) => {
+  async ({ period, src, limit }) => {
     const { from, to } = periodRange(period);
-    const summary = history.summarizeByTimeRange(from, to, { src: src || null });
+    const data = await api('/connections/summary', { from, to, buckets: 1, src: src || undefined });
     if (src) {
-      const topDst = summary.byDst.slice(0, limit).map(d => ({
+      const topDst = (data.byDst ?? []).slice(0, limit).map(d => ({
         dst:      d.dst,
         host:     d.dstHost || null,
         country:  d.country || null,
         org:      d.org     || null,
         sessions: d.count,
-        threat:   threatLevel(d.dst, d.dstHost),
+        threat:   d.threat  || null,
       }));
       return ok({ period, src, topDestinations: topDst });
     }
-    const devRows = summary.byDevice.slice(0, limit).map(d => ({
+    const devRows = (data.byDevice ?? []).slice(0, limit).map(d => ({
       src:       d.src,
       mac:       d.srcMac    || null,
       vendor:    d.srcVendor || null,
@@ -166,39 +164,37 @@ server.tool(
   }
 );
 
-// ⑤ New nodes ──────────────────────────────────────────────────────────────────
+// ⑤ New nodes
 server.tool(
   'get_new_nodes',
-  'Lists devices and destinations that were seen for the very first time during the period ' +
-  '(i.e. their global first-seen timestamp falls within the window).',
+  'Lists devices and destinations that were seen for the very first time during the period.',
   { period: PERIOD_ENUM.default('24h') },
-  ({ period }) => {
+  async ({ period }) => {
     const { from, to } = periodRange(period);
-    const result = history.queryNewNodes(from, to);
+    const data = await api('/connections/new-nodes', { from, to });
     return ok({
       period,
-      deviceCount:      result.deviceCount,
-      destinationCount: result.destinationCount,
-      newDevices:       result.newDevices.map(d => ({
+      deviceCount:      data.deviceCount,
+      destinationCount: data.destinationCount,
+      newDevices: (data.newDevices ?? []).map(d => ({
         src:       d.src,
         mac:       d.srcMac     || null,
         vendor:    d.srcVendor  || null,
         dnsName:   d.srcDnsName || d.srcMdnsName || null,
         firstSeen: tsToIso(d.firstSeen),
       })),
-      newDestinations: result.newDestinations.map(d => ({
+      newDestinations: (data.newDestinations ?? []).map(d => ({
         dst:       d.dst,
         host:      d.dstHost || null,
         country:   d.country || null,
         org:       d.org     || null,
-        threat:    threatLevel(d.dst, d.dstHost),
         firstSeen: tsToIso(d.firstSeen),
       })),
     });
   }
 );
 
-// ⑥ Threat connections ─────────────────────────────────────────────────────────
+// ⑥ Threat connections
 server.tool(
   'get_threat_connections',
   'Lists destinations flagged as threats. confidence: "low"=warn, "high"=danger, "all"=both.',
@@ -207,31 +203,14 @@ server.tool(
     confidence: z.enum(['low', 'high', 'all']).default('all'),
     limit:      z.number().int().min(1).max(200).default(50),
   },
-  ({ period, confidence, limit }) => {
+  async ({ period, confidence, limit }) => {
     const { from, to } = periodRange(period);
-    const groups = history.groupDstByTimeRange(from, to);
-    const hits = [];
-    for (const { dst, dstHost, cnt } of groups) {
-      const t = threatIntel.matchThreatIntel(dst, dstHost || dst);
-      if (!t) continue;
-      if (confidence === 'low'  && t.confidence !== 'low')  continue;
-      if (confidence === 'high' && t.confidence !== 'high') continue;
-      hits.push({
-        dst,
-        host:       dstHost       || null,
-        sessions:   cnt,
-        confidence: t.confidence,
-        feed:       t.feed        || null,
-        category:   t.category    || null,
-      });
-      if (hits.length >= limit) break;
-    }
-    hits.sort((a, b) => b.sessions - a.sessions);
-    return ok({ period, confidence, count: hits.length, threats: hits });
+    const data = await api('/connections/threat-connections', { from, to, confidence, limit });
+    return ok({ period, confidence, count: data.count, threats: data.threats ?? [] });
   }
 );
 
-// ⑦ Alerts ────────────────────────────────────────────────────────────────────
+// ⑦ Alerts
 server.tool(
   'get_alerts',
   'Returns recent detection alerts from the notification log (threats, new devices, beacons).',
@@ -239,10 +218,10 @@ server.tool(
     period: PERIOD_ENUM.default('24h'),
     limit:  z.number().int().min(1).max(200).default(50),
   },
-  ({ period, limit }) => {
+  async ({ period, limit }) => {
     const { from, to } = periodRange(period);
-    const rows = history.queryNotificationLog(from, to).slice(0, limit);
-    const alerts = rows.map(r => ({
+    const data = await api('/notification-log', { from, to });
+    const alerts = (data.logs ?? []).slice(0, limit).map(r => ({
       type:       r.type,
       detectedAt: tsToIso(r.detectedAt),
       dst:        r.dst        || null,
@@ -255,15 +234,16 @@ server.tool(
   }
 );
 
-// ⑧ Devices ───────────────────────────────────────────────────────────────────
+// ⑧ Devices
 server.tool(
   'get_devices',
   'Lists all known devices with MAC address, vendor, names, status, and last-seen time.',
   {
     include_archived: z.boolean().default(false).describe('Include archived/merged devices'),
   },
-  ({ include_archived }) => {
-    const devs = devices.getAll({ includeArchived: include_archived }).map(d => ({
+  async ({ include_archived }) => {
+    const data = await api('/devices', { includeArchived: include_archived ? '1' : undefined });
+    const devs = (data.devices ?? data ?? []).map(d => ({
       deviceId:  d.deviceId,
       ip:        d.ip,
       mac:       d.mac       || null,
@@ -278,7 +258,7 @@ server.tool(
   }
 );
 
-// ⑨ Query connections ─────────────────────────────────────────────────────────
+// ⑨ Query connections
 server.tool(
   'query_connections',
   'Searches the connection log with optional src/dst filters. Returns matching rows with threat assessment.',
@@ -288,13 +268,14 @@ server.tool(
     dst:    z.string().optional().describe('Filter by destination IP or hostname (contains match)'),
     limit:  z.number().int().min(1).max(500).default(100),
   },
-  ({ period, src, dst, limit }) => {
+  async ({ period, src, dst, limit }) => {
     const { from, to } = periodRange(period);
-    const filters = {};
-    if (src) filters.src = { mode: 'contains', value: src };
-    if (dst) filters.dst = { mode: 'contains', value: dst };
-    const rows = history.queryByTimeRangePaged(from, to, limit, 0, { filters });
-    const out = rows.map(r => ({
+    const data = await api('/connections', {
+      from, to, limit, offset: 0,
+      fSrc: src || undefined,
+      fDst: dst || undefined,
+    });
+    const out = (data.connections ?? []).map(r => ({
       src:       r.src,
       dst:       r.dst,
       host:      r.dstHost  || null,
@@ -302,7 +283,7 @@ server.tool(
       proto:     r.proto,
       country:   r.country  || null,
       org:       r.org      || null,
-      threat:    threatLevel(r.dst, r.dstHost),
+      threat:    r.threat   || null,
       firstSeen: tsToIso(r.firstSeen),
       lastSeen:  tsToIso(r.lastSeen),
     }));

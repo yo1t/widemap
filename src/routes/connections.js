@@ -106,6 +106,35 @@ function connectionsRoutes(ctx) {
     res.json({ ...summary, serverTime: Date.now(), cached: false });
   });
 
+  router.get('/connections/new-nodes', requireAdmin, (req, res) => {
+    const { ts: from, err: e1 } = parseTimestampParam(req.query.from, 'from', res);
+    if (e1) return;
+    const { ts: to, err: e2 } = parseTimestampParam(req.query.to, 'to', res);
+    if (e2) return;
+    res.json({ ...history.queryNewNodes(from, to), serverTime: Date.now() });
+  });
+
+  router.get('/connections/threat-connections', requireAdmin, (req, res) => {
+    const { ts: from, err: e1 } = parseTimestampParam(req.query.from, 'from', res);
+    if (e1) return;
+    const { ts: to, err: e2 } = parseTimestampParam(req.query.to, 'to', res);
+    if (e2) return;
+    const confidence = ['low', 'high', 'all'].includes(req.query.confidence) ? req.query.confidence : 'all';
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const groups = history.groupDstByTimeRange(from, to);
+    const hits = [];
+    for (const { dst, dstHost, cnt } of groups) {
+      const t = threatIntel?.matchThreatIntel(dst, dstHost || dst);
+      if (!t) continue;
+      if (confidence === 'low'  && t.confidence !== 'low')  continue;
+      if (confidence === 'high' && t.confidence !== 'high') continue;
+      hits.push({ dst, host: dstHost || null, sessions: cnt, confidence: t.confidence, feed: t.feed || null, category: t.category || null });
+      if (hits.length >= limit) break;
+    }
+    hits.sort((a, b) => b.sessions - a.sessions);
+    res.json({ count: hits.length, threats: hits, serverTime: Date.now() });
+  });
+
   router.get('/connections/threat-counts', requireAdmin, (req, res) => {
     const { ts: from, err: e1 } = parseTimestampParam(req.query.from, 'from', res);
     if (e1) return;
