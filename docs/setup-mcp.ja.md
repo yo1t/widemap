@@ -1,0 +1,190 @@
+# AIエージェント連携 — MCP サーバーの設定
+
+EgressView は [Model Context Protocol (MCP)](https://modelcontextprotocol.io) サーバーを内蔵しており、Claude Desktop・Claude Code・Cursor・Zed などの AI アシスタントからネットワークデータを直接参照できます。
+
+> 🇬🇧 [English version](setup-mcp.md)
+
+## 利用できるツール
+
+| ツール名 | 返す情報 |
+|---|---|
+| `get_threat_summary` | 指定期間の safe / warn / danger セッション数 |
+| `get_traffic_summary` | 総セッション数・ユニーク宛先数・ユニーク端末数 |
+| `get_top_destinations` | 接続数上位の宛先一覧（国・組織・脅威レベル付き） |
+| `get_device_traffic` | 端末ごとのトラフィック（src IP 指定で特定端末の上位宛先） |
+| `get_new_nodes` | 指定期間に初出現した端末・宛先 |
+| `get_threat_connections` | 脅威判定された通信先（信頼度 low/high 絞り込み可） |
+| `get_alerts` | 検出ログ（脅威・新規端末・ビーコン） |
+| `get_devices` | LAN 内の全端末（MAC・ベンダー・状態・最終通信） |
+| `query_connections` | 送信元/宛先フィルター付きの通信ログ検索 |
+
+全ツールに `period` パラメータあり: `1h` / `6h` / `24h`（デフォルト）/ `7d` / `14d`
+
+---
+
+## Option A — stdio モード（ローカル・最も簡単）
+
+Claude Desktop と同じマシン上で MCP サーバーを起動します。MCP サーバーが EgressView の REST API を HTTP で呼び出します。
+
+**前提条件:** Node.js 18+、稼働中の EgressView、admin トークン
+
+```bash
+# 1. クローン（まだの場合）:
+git clone https://github.com/yo1t/egressview.git
+cd egressview
+npm install
+
+# 2. 環境ファイルをコピーして編集:
+cp .env.mcp.example .env.mcp
+# .env.mcp の EGRESSVIEW_URL と EGRESSVIEW_TOKEN を設定
+```
+
+**Claude Desktop の設定ファイル** (`~/Library/Application Support/Claude/claude_desktop_config.json`、macOS の場合):
+
+```json
+{
+  "mcpServers": {
+    "egressview": {
+      "command": "node",
+      "args": ["/absolute/path/to/egressview/mcp-server.js"],
+      "env": {
+        "EGRESSVIEW_URL":   "http://your-server-ip:3002",
+        "EGRESSVIEW_TOKEN": "your-admin-token"
+      }
+    }
+  }
+}
+```
+
+設定後に Claude Desktop を再起動すると、MCP ツール一覧に `egressview` が表示されます。
+
+---
+
+## Option B — リバースプロキシ経由の HTTP モード（リモートアクセス）
+
+EgressView と同じサーバー上で `mcp-server.js` を HTTP サーバーとして起動し、リバースプロキシ（Apache または nginx）経由で外部公開します。Claude Desktop 側にはローカルの Node.js プロセスが不要になります。
+
+### Step 1 — EgressView サーバー上で MCP サーバーを起動
+
+```bash
+# 環境ファイルをコピーして編集:
+cp .env.mcp.example .env.mcp
+# MCP_PORT=3010、EGRESSVIEW_URL=http://localhost:3002、EGRESSVIEW_TOKEN=... を設定
+chmod 600 .env.mcp
+
+# 動作確認:
+set -a; source .env.mcp; set +a
+node mcp-server.js
+# → [egressview-mcp] HTTP transport listening on 127.0.0.1:3010/mcp
+```
+
+### Step 2a — Apache (httpd) の設定
+
+既存の `<VirtualHost>` または設定ファイルに追記します。MCP のブロックは、既存の `/egressview/` ProxyPass ルール**より前**に置く必要があります。
+
+```apache
+# ─── EgressView MCP サーバー ─────────────────────────────────────────────────
+<Location /egressview/mcp>
+    ProxyPass        http://127.0.0.1:3010/mcp flushpackets=on
+    ProxyPassReverse http://127.0.0.1:3010/mcp
+    # MCP Streamable HTTP は Accept ヘッダーに両タイプが必要
+    RequestHeader set Accept "application/json, text/event-stream"
+</Location>
+
+# ─── EgressView Web UI（既存のルール — 下に置く） ────────────────────────────
+ProxyPass        /egressview/ http://127.0.0.1:3002/
+ProxyPassReverse /egressview/ http://127.0.0.1:3002/
+```
+
+必要な Apache モジュール: `mod_proxy`、`mod_proxy_http`、`mod_headers`（通常はデフォルトで有効）
+
+```bash
+sudo apachectl configtest && sudo systemctl reload httpd
+```
+
+### Step 2b — nginx の設定
+
+`server {}` ブロック内に追記:
+
+```nginx
+location /egressview/mcp {
+    proxy_pass         http://127.0.0.1:3010/mcp;
+    proxy_http_version 1.1;
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    # SSE（ストリーミングレスポンス）のために必要
+    proxy_set_header   Accept            "application/json, text/event-stream";
+    proxy_set_header   Connection        '';
+    proxy_buffering    off;
+    proxy_cache        off;
+    proxy_read_timeout 3600s;
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Step 3 — systemd サービスとして登録（推奨）
+
+```ini
+# /etc/systemd/system/egressview-mcp.service
+[Unit]
+Description=EgressView MCP Server
+After=network.target egressview.service
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/egressview
+EnvironmentFile=/home/ec2-user/egressview/.env.mcp
+ExecStart=/usr/bin/node /home/ec2-user/egressview/mcp-server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now egressview-mcp
+```
+
+### Step 4 — Claude Desktop の設定（HTTP モード）
+
+```json
+{
+  "mcpServers": {
+    "egressview": {
+      "url": "http://your-server-ip/egressview/mcp",
+      "headers": {
+        "X-Admin-Token": "your-admin-token"
+      }
+    }
+  }
+}
+```
+
+リバースプロキシで TLS を終端している場合は `https://` を使用してください。
+
+---
+
+## 環境変数リファレンス
+
+| 変数 | 必須 | デフォルト | 説明 |
+|---|---|---|---|
+| `EGRESSVIEW_URL` | ✅ | `http://localhost:3002` | EgressView サーバーのベース URL |
+| `EGRESSVIEW_TOKEN` | ✅ | — | admin トークン（EgressView 初回起動時にコンソールへ表示） |
+| `MCP_PORT` | HTTP モード | — | MCP HTTP サーバーのローカルポート（例: `3010`）。stdio モードの場合は不要 |
+| `MCP_TOKEN` | — | `EGRESSVIEW_TOKEN` と同じ | MCP HTTP エンドポイントの認証トークン。EgressView API とは別のトークンを使いたい場合に設定 |
+
+---
+
+## セキュリティについて
+
+- MCP HTTP サーバーは `127.0.0.1` のみをリッスンします。リバースプロキシなしでは外部から到達できません
+- 認証は `X-Admin-Token` ヘッダーを使用します（EgressView API と同じ仕組み）
+- MCP サーバーはデータの読み取りのみ。EgressView のデータベースへの書き込み権限はありません
+- `.env.mcp` には admin トークンが含まれるため、`chmod 600` で保護してください

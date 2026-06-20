@@ -99,6 +99,19 @@ https://github.com/user-attachments/assets/8682ec5f-1632-400f-b31b-d371f6b1b237
 - **Yamaha RTX** ルーター（SSH有効化済み）— RTX1200, RTX1210, RTX1220, RTX1300 等
 - （任意）**ASUS WiFi アクセスポイント**（Web管理画面が有効、APモード/AiMeshとして使用）
 
+## AIエージェント連携（MCP）
+
+EgressView は [Model Context Protocol (MCP)](https://modelcontextprotocol.io) サーバーを内蔵しています。Claude Desktop・Claude Code などの AI アシスタントから、脅威サマリー・上位宛先・新規端末・アラートなどをクエリできます。
+
+```bash
+# stdio モード（ローカル）: Claude Desktop の設定に追加して EgressView へ接続
+node mcp-server.js
+```
+
+Apache / nginx 経由のリモートアクセスを含む詳細な手順は **[MCP 設定ガイド →](docs/setup-mcp.ja.md)** を参照してください。
+
+---
+
 ## ハードウェアなしで試す
 
 ルーターを用意する前にUIを触ってみたい場合は**デモモード**で起動できます。160件のサンプル接続が自動でシードされ、固定のトークンで認証できます。

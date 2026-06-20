@@ -99,6 +99,19 @@ Connection Log and Devices let you drill down into suspicious destinations, nois
 - **Yamaha RTX** router with SSH access enabled (RTX1200, RTX1210, RTX1220, RTX1300, etc.)
 - (Optional) **ASUS WiFi access point** with web admin enabled (used as AP/mesh mode, not as a router)
 
+## AI Agent Access (MCP)
+
+EgressView exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server so Claude Desktop, Claude Code, and other AI assistants can query your network data — threat summaries, top destinations, new devices, alerts, and more.
+
+```bash
+# stdio mode (local): add to Claude Desktop config and point at your EgressView instance
+node mcp-server.js
+```
+
+See the **[MCP setup guide →](docs/setup-mcp.md)** for full instructions including HTTP mode behind Apache / nginx for remote access.
+
+---
+
 ## Try Without Hardware
 
 Want to explore the UI before setting up a router? Start in **demo mode** — it seeds 160 realistic sample connections and uses a fixed admin token:
