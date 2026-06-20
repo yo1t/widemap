@@ -295,6 +295,10 @@
         <h3>🔔 検出ログ</h3>
         <p>脅威検出・新規端末アラートの永続履歴。カラム別フィルター・ソート・クリック詳細ポップアップ付き。Slack設定の有無にかかわらず全検出を記録 — いつでも振り返り可能。</p>
       </div>
+      <div class="card">
+        <h3>🤖 AIエージェント連携（MCP）</h3>
+        <p><a href="https://modelcontextprotocol.io/">Model Context Protocol</a> サーバーを内蔵。通信サマリー・脅威接続・宛先ランキング・端末一覧・端末メモなど 11本のツールを Claude・Cursor 等の AI アシスタントに公開。stdio / HTTP 両対応。<a href="https://github.com/yo1t/egressview/blob/main/docs/setup-mcp.ja.md">設定ガイド →</a></p>
+      </div>
     </div>
   </section>
 
@@ -328,12 +332,12 @@
     <h2><span class="icon">⬡</span> アーキテクチャ</h2>
     <div class="arch-block">
       <pre><code>┌─────────────────┐  SSH(NAT)   ┌──────────────────────┐
-│  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
-│  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► ブラウザ
-└─────────────────┘             │                      │
-┌─────────────────┐  HTTP       │  ポーラー:            │
-│  ASUS WiFi AP   │◄───────────►│  • yamaha (SSH)      │
+│  Yamaha RTX     │◄───────────►│                      │  WebSocket   ┌──────────────────┐
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server  │◄────────────►│ ブラウザ          │
+│  [DHCPD] log    │────────────►│   (Node.js)          │  MCP         ├──────────────────┤
+└─────────────────┘             │                      │◄────────────►│ AI アシスタント   │
+┌─────────────────┐  HTTP       │  ポーラー:            │  stdio/HTTP  │(Claude, Cursor…) │
+│  ASUS WiFi AP   │◄───────────►│  • yamaha (SSH)      │              └──────────────────┘
 │  (クライアント)   │             │  • asus (HTTP)       │
 └─────────────────┘             │  • inspect-syslog    │
 ┌─────────────────┐  tail -F    │  • dhcpd-syslog      │

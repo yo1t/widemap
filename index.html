@@ -295,6 +295,10 @@
         <h3>🔔 Detection Log</h3>
         <p>Persistent history of all threat detections and new-device alerts. Per-column filter, sort, and click-to-detail popup. Logged regardless of Slack configuration — always available for review.</p>
       </div>
+      <div class="card">
+        <h3>🤖 AI Agent Access (MCP)</h3>
+        <p>Built-in <a href="https://modelcontextprotocol.io/">Model Context Protocol</a> server exposes 11 tools — traffic summary, threat connections, top destinations, device list, device notes, and more — to AI assistants such as Claude and Cursor. Supports stdio and HTTP transport. <a href="https://github.com/yo1t/egressview/blob/main/docs/setup-mcp.md">Setup guide →</a></p>
+      </div>
     </div>
   </section>
 
@@ -328,12 +332,12 @@
     <h2><span class="icon">⬡</span> Architecture</h2>
     <div class="arch-block">
       <pre><code>┌─────────────────┐  SSH(NAT)   ┌──────────────────────┐
-│  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
-│  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► Browser
-└─────────────────┘             │                      │
-┌─────────────────┐  HTTP       │  Pollers:            │
-│  ASUS WiFi AP   │◄───────────►│  • yamaha (SSH)      │
+│  Yamaha RTX     │◄───────────►│                      │  WebSocket   ┌──────────────────┐
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server  │◄────────────►│ Browser          │
+│  [DHCPD] log    │────────────►│   (Node.js)          │  MCP         ├──────────────────┤
+└─────────────────┘             │                      │◄────────────►│ AI Assistant     │
+┌─────────────────┐  HTTP       │  Pollers:            │  stdio/HTTP  │ (Claude, Cursor…)│
+│  ASUS WiFi AP   │◄───────────►│  • yamaha (SSH)      │              └──────────────────┘
 │  (Client list)  │             │  • asus (HTTP)       │
 └─────────────────┘             │  • inspect-syslog    │
 ┌─────────────────┐  tail -F    │  • dhcpd-syslog      │

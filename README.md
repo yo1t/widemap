@@ -45,6 +45,7 @@ EgressView answers the question most home users can't ask: *what is each device 
 - **Connection log**: sortable/searchable table of all sessions with threat status badges; **App column** infers the application or service name from port number and destination hostname (APNs, FCM, AirPlay, MQTT/TLS, QUIC, iCloud, YouTube, AWS, Slack, Zoom, Tuya Smart, Gaijin/DCS, and more)
 - **🔔 Detection Log** — persistent history of all threat detections and new-device alerts, with per-column filter, sort, and click-to-detail popup; logged regardless of Slack configuration
 - **📡 Data Sources tab** — configure each data source (dnsmasq / [INSPECT] / [DHCPD]) independently from the settings UI
+- **🤖 AI Agent access (MCP)** — built-in [Model Context Protocol](https://modelcontextprotocol.io/) server exposes 11 tools (traffic summary, threat connections, top destinations, device list, device notes, and more) to AI assistants such as Claude and Cursor; supports both stdio and HTTP transport
 - Single-page dark-themed UI: Graph Map, Statistics, Connection Log, Devices, Detection Log, and Settings
 
 ## Demo
@@ -68,12 +69,12 @@ Connection Log and Devices let you drill down into suspicious destinations, nois
 
 ```
 ┌─────────────────┐  SSH (NAT)  ┌──────────────────────┐
-│  Yamaha RTX     │◄───────────►│                      │
-│  [INSPECT] log  │  syslog/UDP │   EgressView Server     │  WebSocket
-│  [DHCPD] log    │────────────►│   (Node.js)          │◄──────────► Browser
-└─────────────────┘             │                      │
-┌─────────────────┐  HTTP       │  Pollers:            │
-│  ASUS WiFi AP   │◄───────────►│  • yamaha (SSH)      │
+│  Yamaha RTX     │◄───────────►│                      │  WebSocket   ┌──────────────────┐
+│  [INSPECT] log  │  syslog/UDP │   EgressView Server  │◄────────────►│ Browser          │
+│  [DHCPD] log    │────────────►│   (Node.js)          │  MCP         ├──────────────────┤
+└─────────────────┘             │                      │◄────────────►│ AI Assistant     │
+┌─────────────────┐  HTTP       │  Pollers:            │  stdio/HTTP  │ (Claude, Cursor…)│
+│  ASUS WiFi AP   │◄───────────►│  • yamaha (SSH)      │              └──────────────────┘
 │  (Client list)  │             │  • asus (HTTP)       │
 └─────────────────┘             │  • inspect-syslog    │
 ┌─────────────────┐  tail -F    │  • dhcpd-syslog      │
