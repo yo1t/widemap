@@ -171,6 +171,7 @@ DEMO_MODE=true DEMO_ADMIN_TOKEN=my-token npm start
 | ✅ | Mac/PC/Raspberry Pi に Node.js 18以上をインストール | [nodejs.org](https://nodejs.org) |
 | ✅ | Yamaha RTX ルーターの SSH を有効化 | [設定ガイド →](docs/setup-yamaha.ja.md) |
 | ☐ | （任意）ASUS WiFi AP の Web 管理画面を有効化 | [設定ガイド →](docs/setup-asus.ja.md) |
+| ☐ | （任意）AI アシスタント連携（Claude・Cursor 等） | [設定ガイド →](docs/setup-mcp.ja.md) |
 
 ### Step 2 — インストールと起動
 

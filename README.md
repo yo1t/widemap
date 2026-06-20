@@ -170,6 +170,7 @@ Start with the smallest path that matches your network, then add sources later f
 | ✅ | Node.js 18+ installed on your Mac/PC/Raspberry Pi | [nodejs.org](https://nodejs.org) |
 | ✅ | Yamaha RTX router with SSH enabled | [Setup guide →](docs/setup-yamaha.md) |
 | ☐ | (Optional) ASUS WiFi AP with web admin enabled | [Setup guide →](docs/setup-asus.md) |
+| ☐ | (Optional) AI assistant access via MCP (Claude, Cursor…) | [Setup guide →](docs/setup-mcp.md) |
 
 ### Step 2 — Install and launch
 
