@@ -1,6 +1,7 @@
 // Connection history: SQLite-backed storage (better-sqlite3 — native, WAL mode)
 'use strict';
 const logger = require('./logger');
+const { summarizeAppGroups } = require('./app-classifier');
 
 const Database = require('better-sqlite3');
 const fs = require('fs');
@@ -477,12 +478,13 @@ function summarizeByTimeRange(from, to, { src = null, buckets = 60 } = {}) {
      FROM connections${where}${where ? ' AND' : ' WHERE'} lat IS NOT NULL AND lon IS NOT NULL
      GROUP BY key, lat, lon ORDER BY totalSessions DESC LIMIT 500`
   ).all(...params);
-  const appGroups = db.prepare(
+  const appRows = db.prepare(
     `SELECT dport, proto, COALESCE(NULLIF(dstHost, ''), dst) as dstHost,
             COUNT(*) as count
      FROM connections${where}
-     GROUP BY dport, proto, dstHost ORDER BY count DESC LIMIT 1000`
+     GROUP BY dport, proto, dstHost ORDER BY count DESC`
   ).all(...params);
+  const appGroups = summarizeAppGroups(appRows);
   const timeline = db.prepare(
     `SELECT ${targetExpr} as key,
             CASE

@@ -409,7 +409,7 @@ function appSlicesFromSummary(groups, topN) {
   const otherLabel = t('stats.legend.other');
   const counts = new Map();
   for (const g of groups || []) {
-    const app = guessApp(g.dport, g.proto, g.dstHost) || unknownLabel;
+    const app = g.app || guessApp(g.dport, g.proto, g.dstHost) || unknownLabel;
     counts.set(app, (counts.get(app) || 0) + (g.count || 0));
   }
   const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);

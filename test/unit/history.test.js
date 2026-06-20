@@ -552,7 +552,9 @@ describe('summarizeByTimeRange', () => {
     assert.ok(result.byTarget.some(r => r.key === 'Amazon.com, Inc.' && r.count === 1));
     assert.ok(result.byEdge.some(r => r.src === '192.168.1.10' && r.key === 'Amazon.com, Inc.' && r.count === 1));
     assert.ok(result.byLocation.some(r => r.org === 'Google LLC' && r.totalSessions === 1));
-    assert.ok(result.appGroups.some(r => r.dport === 443 && r.proto === 'TCP' && r.count >= 1));
+    assert.equal(result.appGroups.reduce((sum, r) => sum + r.count, 0), result.total);
+    assert.ok(result.appGroups.some(r => r.app === 'AWS' && r.count === 1));
+    assert.ok(result.appGroups.some(r => r.app === 'Google' && r.count === 1));
     assert.equal(result.timeline.reduce((sum, r) => sum + r.count, 0), 2);
   });
 
