@@ -210,6 +210,30 @@ function nlShowDetail(row) {
   overlay.classList.remove('hidden');
 }
 
+function nlCloseDetail() {
+  document.getElementById('notif-log-detail-overlay')?.classList.add('hidden');
+}
+
+function nlInitDetailPopup() {
+  const overlay = document.getElementById('notif-log-detail-overlay');
+  const closeBtn = document.getElementById('notif-log-detail-close');
+  if (!overlay) return;
+
+  closeBtn?.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    nlCloseDetail();
+  });
+
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) nlCloseDetail();
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') nlCloseDetail();
+  });
+}
+
 // ─── Sort ─────────────────────────────────────────────────────────────────────
 
 function nlInitSort() {
@@ -330,6 +354,7 @@ async function loadNotifLog() {
 function initNotifLog() {
   nlInitSort();
   nlInitFilterPopup();
+  nlInitDetailPopup();
   document.getElementById('notif-log-refresh-btn')
     ?.addEventListener('click', loadNotifLog);
 }

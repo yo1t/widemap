@@ -786,11 +786,11 @@
       </div>
     </div>
     <!-- Detail popup -->
-    <div id="notif-log-detail-overlay" class="threat-detail-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div id="notif-log-detail-overlay" class="threat-detail-overlay hidden">
       <div class="threat-detail-card">
         <div class="threat-detail-header">
           <span data-i18n="notif-log.detail.title">検出詳細</span>
-          <button class="settings-close" onclick="document.getElementById('notif-log-detail-overlay').classList.add('hidden')">✕</button>
+          <button class="settings-close" id="notif-log-detail-close" type="button">✕</button>
         </div>
         <div class="threat-detail-body" id="notif-log-detail-body"></div>
       </div>
