@@ -4,7 +4,7 @@
 
 スマートTVが見知らぬサーバーと通信していないか？IPカメラやIoT機器、NASが許可していない接続をしていないか？EgressViewは、LAN内の全デバイスが外部と行う通信を**パッシブに監視**し、グラフマップ/統計情報で全体像を把握し、通信ログ/端末一覧で詳細へドリルダウンできます。脅威フィードとの自動照合、Slack通知に対応。
 
-追加ハードウェア不要。通信の中継・傍受も不要。既存のYamaha RTXルーターのNATセッションテーブルを読み取るだけで動作します。
+追加ハードウェア不要。通信の中継・傍受も不要。既存のYamaha RTXルーターのNATセッションテーブルを読み取るだけで動作します。Claude・Cursor 等の AI アシスタントは、内蔵 MCP サーバーを通じて EgressView に直接アクセスできます — 自然言語でネットワーク状況を問い合わせるだけ。
 
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)

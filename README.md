@@ -4,7 +4,7 @@
 
 Is your smart TV phoning home to unexpected servers? Are your IP cameras, IoT appliances, or NAS boxes making connections you never authorised? EgressView answers these questions by passively monitoring every outbound connection from every device on your LAN, then turning that data into an investigation workflow: Graph Map and Statistics for the big picture, Connection Log and Devices for drill-down analysis — with automatic threat detection.
 
-No new hardware. No inline traffic interception. Works via your existing Yamaha RTX router's NAT session table.
+No new hardware. No inline traffic interception. Works via your existing Yamaha RTX router's NAT session table. AI assistants such as Claude and Cursor can query EgressView directly via the built-in MCP server — just ask in natural language.
 
 ![License](https://img.shields.io/badge/license-AGPL--3.0-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
