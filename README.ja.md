@@ -101,14 +101,36 @@ https://github.com/user-attachments/assets/8682ec5f-1632-400f-b31b-d371f6b1b237
 
 ## AIエージェント連携（MCP）
 
-EgressView は [Model Context Protocol (MCP)](https://modelcontextprotocol.io) サーバーを内蔵しています。Claude Desktop・Claude Code などの AI アシスタントから、脅威サマリー・上位宛先・新規端末・アラートなどをクエリできます。
+EgressView は [Model Context Protocol (MCP)](https://modelcontextprotocol.io) サーバーを内蔵しています。Claude Desktop・Claude Code などの AI アシスタントから、自然言語でネットワークデータを直接参照できます。
 
-```bash
-# stdio モード（ローカル）: Claude Desktop の設定に追加して EgressView へ接続
-node mcp-server.js
+```
+「過去24時間の脅威サマリーを見せて」
+「今週、新しいデバイスはネットワークに現れた？」
+「192.168.1.50 はどこに接続している？」
+「脅威のある通信はある？」
 ```
 
-Apache / nginx 経由のリモートアクセスを含む詳細な手順は **[MCP 設定ガイド →](docs/setup-mcp.ja.md)** を参照してください。
+**クイックセットアップ**（Claude Desktop、macOS の場合）:  
+`~/Library/Application Support/Claude/claude_desktop_config.json` に追記:
+
+```json
+{
+  "mcpServers": {
+    "egressview": {
+      "command": "node",
+      "args": ["/path/to/egressview/mcp-server.js"],
+      "env": {
+        "EGRESSVIEW_URL":   "http://your-server-ip:3002",
+        "EGRESSVIEW_TOKEN": "your-admin-token"
+      }
+    }
+  }
+}
+```
+
+利用可能なツールは9本: `get_threat_summary`、`get_traffic_summary`、`get_top_destinations`、`get_device_traffic`、`get_new_nodes`、`get_threat_connections`、`get_alerts`、`get_devices`、`query_connections`。
+
+リモート EgressView への接続や Apache / nginx 経由の HTTP モードを含む詳細な手順は **[MCP 設定ガイド →](docs/setup-mcp.ja.md)** を参照してください。
 
 ---
 

@@ -101,14 +101,35 @@ Connection Log and Devices let you drill down into suspicious destinations, nois
 
 ## AI Agent Access (MCP)
 
-EgressView exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server so Claude Desktop, Claude Code, and other AI assistants can query your network data — threat summaries, top destinations, new devices, alerts, and more.
+EgressView exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol.io) server so Claude Desktop, Claude Code, and other AI assistants can query your network data directly — just ask in natural language.
 
-```bash
-# stdio mode (local): add to Claude Desktop config and point at your EgressView instance
-node mcp-server.js
+```
+"Show me a threat summary for the last 24 hours"
+"Any new devices on the network this week?"
+"What is 192.168.1.50 connecting to?"
+"Are there any threat connections right now?"
 ```
 
-See the **[MCP setup guide →](docs/setup-mcp.md)** for full instructions including HTTP mode behind Apache / nginx for remote access.
+**Quick setup** (Claude Desktop, macOS): add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "egressview": {
+      "command": "node",
+      "args": ["/path/to/egressview/mcp-server.js"],
+      "env": {
+        "EGRESSVIEW_URL":   "http://your-server-ip:3002",
+        "EGRESSVIEW_TOKEN": "your-admin-token"
+      }
+    }
+  }
+}
+```
+
+9 tools available: `get_threat_summary`, `get_traffic_summary`, `get_top_destinations`, `get_device_traffic`, `get_new_nodes`, `get_threat_connections`, `get_alerts`, `get_devices`, `query_connections`.
+
+See the **[MCP setup guide →](docs/setup-mcp.md)** for full instructions including remote EgressView access and HTTP mode behind Apache / nginx.
 
 ---
 

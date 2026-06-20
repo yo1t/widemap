@@ -4,6 +4,32 @@ EgressView exposes a [Model Context Protocol (MCP)](https://modelcontextprotocol
 
 > 🇯🇵 [日本語版はこちら](setup-mcp.ja.md)
 
+## Example Conversations
+
+Once connected, just ask in natural language:
+
+```
+"Show me a threat summary for the last 24 hours"
+→ 18,142 sessions total: 18,117 safe, 25 warn, 0 danger
+
+"Which devices made the most connections today?"
+→ Lists top devices with session counts, MAC, vendor
+
+"Any new devices on the network this week?"
+→ Reports first-seen devices and destinations in the last 7 days
+
+"Are there any threat connections right now?"
+→ Lists destinations flagged by Feodo, ThreatFox, URLhaus, or Spamhaus DROP
+
+"What is 192.168.1.50 connecting to?"
+→ Top destinations for that device with country, org, and threat level
+
+"Show me all alerts from the last 6 hours"
+→ Detection log: threat hits, new device alerts, beacon candidates
+```
+
+The agent selects the appropriate tool automatically and combines multiple tool calls when needed.
+
 ## Available Tools
 
 | Tool | What it returns |
@@ -22,9 +48,11 @@ All tools accept a `period` parameter: `1h`, `6h`, `24h` (default), `7d`, or `14
 
 ---
 
-## Option A — stdio (local, simplest)
+## Option A — stdio (local, recommended)
 
-Run the MCP server on the same machine as Claude Desktop. It calls EgressView's REST API over HTTP.
+Run the MCP server as a local process on the same machine as Claude Desktop. It makes REST API calls to your EgressView instance — which can be running locally or on a remote server.
+
+This is the recommended approach for Claude Desktop. The `command`-based stdio transport is universally supported and avoids any URL validation restrictions.
 
 **Prerequisites:** Node.js 18+, a running EgressView instance, admin token.
 
@@ -33,10 +61,6 @@ Run the MCP server on the same machine as Claude Desktop. It calls EgressView's 
 git clone https://github.com/yo1t/egressview.git
 cd egressview
 npm install
-
-# 2. Copy and edit the env file:
-cp .env.mcp.example .env.mcp
-# Edit EGRESSVIEW_URL and EGRESSVIEW_TOKEN in .env.mcp
 ```
 
 **Claude Desktop config** (`~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
@@ -56,13 +80,21 @@ cp .env.mcp.example .env.mcp
 }
 ```
 
+- Replace `/absolute/path/to/egressview` with the actual path where you cloned the repo.
+- `EGRESSVIEW_URL` is the base URL of your EgressView server. If EgressView is behind a reverse proxy at `/egressview/`, use that path (e.g. `http://your-server-ip/egressview`).
+- `EGRESSVIEW_TOKEN` is the admin token shown in the EgressView console on first startup.
+
 Restart Claude Desktop after editing. The `egressview` server appears in the MCP tools list.
 
 ---
 
 ## Option B — HTTP via reverse proxy (remote access)
 
-Run `mcp-server.js` as an HTTP server on the same host as EgressView. A reverse proxy (Apache or nginx) exposes it externally. Claude Desktop connects to the proxy URL — no local Node.js process needed.
+Run `mcp-server.js` as an HTTP server on the same host as EgressView. A reverse proxy (Apache or nginx) exposes it externally.
+
+> **Note for Claude Desktop users:** Claude Desktop currently requires `https://` URLs for remote MCP servers. If your reverse proxy does not terminate TLS, use Option A (stdio) instead — it works with both local and remote EgressView instances over plain HTTP.
+
+This option is intended for MCP clients that natively support HTTP transport (Cursor, Zed, Claude Code with HTTP MCP config, custom agents).
 
 ### Step 1 — Start the MCP server on your EgressView host
 
@@ -152,13 +184,15 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now egressview-mcp
 ```
 
-### Step 4 — Claude Desktop config (HTTP mode)
+### Step 4 — Client config (HTTP mode)
+
+For MCP clients that support HTTP transport (Cursor, Zed, custom agents):
 
 ```json
 {
   "mcpServers": {
     "egressview": {
-      "url": "http://your-server-ip/egressview/mcp",
+      "url": "https://your-server/egressview/mcp",
       "headers": {
         "X-Admin-Token": "your-admin-token"
       }
@@ -167,7 +201,7 @@ sudo systemctl enable --now egressview-mcp
 }
 ```
 
-Use `https://` if your reverse proxy terminates TLS.
+Use `https://` if your reverse proxy terminates TLS (required for Claude Desktop). For plain `http://`, use Option A (stdio) from Claude Desktop instead.
 
 ---
 
