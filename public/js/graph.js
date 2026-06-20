@@ -290,6 +290,7 @@ function drawNodes() {
       if (statsMode) updateStats();
       updateConnPanel(selectedIp);
       if (logMode) updateLogView();
+      if (typeof nlMode !== 'undefined' && nlMode) nlRender();
     })
     .on('mouseenter', showTooltip).on('mousemove', moveTooltip).on('mouseleave', hideTooltip);
 
@@ -465,6 +466,7 @@ function updateSidePanel(clients, data, meshNodes, mainMac) {
           if (statsMode) updateStats();
         updateConnPanel(selectedMac ? c.ip : null);
         if (logMode) updateLogView();
+        if (typeof nlMode !== 'undefined' && nlMode) nlRender();
         if (devicesMode) {
           dvSelectedIp = selectedIp;
           renderDevicesTable();

@@ -39,6 +39,13 @@ function nlMatchFilter(value, filter) {
 
 function nlFilteredRows() {
   let rows = nlAllRows;
+  // Node selection filter (mirrors log.js device filter logic)
+  if (selectedMac || selectedIp) {
+    rows = rows.filter(r =>
+      (selectedMac && r.srcMac === selectedMac) ||
+      (selectedIp  && r.src   === selectedIp)
+    );
+  }
   for (const [col, filter] of Object.entries(nlFilters)) {
     if (!filter || !filter.value) continue;
     rows = rows.filter(r => nlMatchFilter(nlCellValue(r, col), filter));
@@ -62,6 +69,23 @@ function nlRender() {
   const tbody  = document.getElementById('notif-log-tbody');
   const countEl = document.getElementById('notif-log-count');
   if (!tbody) return;
+
+  // Node filter badge
+  const filterBadge = document.getElementById('notif-log-device-filter');
+  if (filterBadge) {
+    if (selectedMac || selectedIp) {
+      const label = selectedIp || selectedMac;
+      filterBadge.style.display = 'inline';
+      filterBadge.innerHTML = `<span style="background:var(--accent);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;cursor:pointer" title="${esc(t('log.deviceFilter.clear'))}" id="nl-device-filter-clear">${esc(tVars('log.deviceFilter.only', { value: label }))}</span>`;
+      document.getElementById('nl-device-filter-clear')?.addEventListener('click', () => {
+        selectedMac = null; selectedIp = null;
+        updateSideHighlight();
+        nlRender();
+      });
+    } else {
+      filterBadge.style.display = 'none';
+    }
+  }
 
   const rows = nlFilteredRows();
   countEl.textContent = tVars('notif-log.count', { n: rows.length });

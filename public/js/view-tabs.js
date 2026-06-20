@@ -9,6 +9,9 @@ function switchView(view) {
   logMode     = (view === 'log');
   devicesMode = (view === 'devices');
   if (typeof nlMode !== 'undefined') nlMode = (view === 'notif-log');
+  // 端末一覧・検出ログは全件表示のため期間フィルターは無関係
+  document.querySelector('.time-filter')
+    ?.classList.toggle('disabled', view === 'devices' || view === 'notif-log');
   document.getElementById('graph-container').style.display        = view === 'graph'     ? 'flex' : 'none';
   document.getElementById('stats-container').style.display        = view === 'stats'     ? 'flex' : 'none';
   document.getElementById('log-container').style.display          = view === 'log'       ? 'flex' : 'none';

@@ -120,6 +120,7 @@
     padding: 3px 4px;
   }
   .time-filter select option { background: var(--panel); color: var(--text); }
+  .time-filter.disabled { opacity: 0.35; pointer-events: none; }
   .time-custom-input {
     background: transparent; border: 1px solid var(--border); border-radius: 4px;
     color: var(--text); font-family: inherit; font-size: 11px; padding: 2px 4px;
