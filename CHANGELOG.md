@@ -2,6 +2,13 @@
 
 All notable changes to EgressView are documented here.
 
+## [1.0.1] - 2026-06-20
+
+### Fixed
+
+- Stabilized GitHub Actions browser smoke tests for the authenticated UI and statistics map.
+- Updated GitHub Actions dependencies to avoid Node.js 20 runtime deprecation warnings.
+
 ## [1.0.0] - 2026-06-20
 
 ### Added
