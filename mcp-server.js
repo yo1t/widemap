@@ -26,7 +26,7 @@
 //       "headers": { "X-Admin-Token": "your-admin-token" }
 //   }}}
 //
-// nginx snippet:  see docs/nginx-mcp.conf
+// nginx/Apache snippet:  see docs/setup-mcp.md
 
 const express = require('express');
 const { McpServer }                      = require('@modelcontextprotocol/sdk/server/mcp.js');
@@ -329,21 +329,26 @@ async function startStdio() {
 // Each request creates its own McpServer + transport (stateless).
 // The auth check is done here; nginx does NOT need to strip/add tokens.
 
+function createAuthMiddleware(token) {
+  const crypto = require('crypto');
+  return (req, res, next) => {
+    const provided = req.headers['x-admin-token']
+      || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    const a = Buffer.from(provided || '');
+    const b = Buffer.from(token);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: 'unauthorized' });
+    }
+    next();
+  };
+}
+
 async function startHttp(port) {
   const app = express();
   app.use(express.json());
 
   // Auth: accept X-Admin-Token header or Authorization: Bearer <token>
-  app.use('/mcp', (req, res, next) => {
-    const provided = req.headers['x-admin-token']
-      || (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-    const a = Buffer.from(provided || '');
-    const b = Buffer.from(MCP_TOKEN);
-    if (a.length !== b.length || !require('crypto').timingSafeEqual(a, b)) {
-      return res.status(401).json({ error: 'unauthorized' });
-    }
-    next();
-  });
+  app.use('/mcp', createAuthMiddleware(MCP_TOKEN));
 
   // Streamable HTTP — handles POST (tool calls) and GET (SSE stream)
   const handleMcp = async (req, res) => {
@@ -372,14 +377,20 @@ async function startHttp(port) {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
-if (MCP_PORT) {
-  startHttp(MCP_PORT).catch(err => {
-    process.stderr.write(`[egressview-mcp] ${err.message}\n`);
-    process.exit(1);
-  });
-} else {
-  startStdio().catch(err => {
-    process.stderr.write(`[egressview-mcp] ${err.message}\n`);
-    process.exit(1);
-  });
+if (require.main === module) {
+  if (MCP_PORT) {
+    startHttp(MCP_PORT).catch(err => {
+      process.stderr.write(`[egressview-mcp] ${err.message}\n`);
+      process.exit(1);
+    });
+  } else {
+    startStdio().catch(err => {
+      process.stderr.write(`[egressview-mcp] ${err.message}\n`);
+      process.exit(1);
+    });
+  }
 }
+
+// ─── Test exports (only when required, not when run directly) ─────────────────
+module.exports._createAuthMiddleware = createAuthMiddleware;
+module.exports._buildMcpServer       = buildMcpServer;
