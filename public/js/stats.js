@@ -687,6 +687,10 @@ function truncateLabel(s, maxLen) {
   return s.length > maxLen ? s.substring(0, maxLen - 1) + '…' : s;
 }
 
+function chartInnerWidth(width, margin) {
+  return Math.max(1, width - margin.left - margin.right);
+}
+
 function drawBarChart(orgs /* [[name, count], ...] */) {
   const svg = d3.select('#chart-bar');
   const node = svg.node();
@@ -701,7 +705,7 @@ function drawBarChart(orgs /* [[name, count], ...] */) {
   const leftMargin = isMobile ? 110 : 180;
   const labelMax   = isMobile ? 14  : 32;
   const margin = { top: 4, right: 40, bottom: 6, left: leftMargin };
-  const iw = w - margin.left - margin.right;
+  const iw = chartInnerWidth(w, margin);
   const ih = h - margin.top - margin.bottom;
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
