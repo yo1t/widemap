@@ -223,9 +223,18 @@ function renderLogView() {
   }
 
   // Threat counts (before badge filter)
-  const threatCount = conns.filter(c => c.threat && c.threat.confidence !== 'low').length;
-  const warnCount   = conns.filter(c => c.threat && c.threat.confidence === 'low').length;
-  const safeCount   = conns.length - threatCount - warnCount;
+  // In paged mode, reuse the graph's cached allConnections (already has threat data,
+  // up to 50k rows) so counts reflect the full time range, not just the current page.
+  let threatBase = conns;
+  if (!logFetchAllMode && typeof getFilteredConnections === 'function') {
+    let base = getFilteredConnections();
+    if (selectedMac)      base = base.filter(c => c.srcMac === selectedMac);
+    else if (selectedIp)  base = base.filter(c => c.src === selectedIp);
+    if (base.length > 0) threatBase = base;
+  }
+  const threatCount = threatBase.filter(c => c.threat && c.threat.confidence !== 'low').length;
+  const warnCount   = threatBase.filter(c => c.threat && c.threat.confidence === 'low').length;
+  const safeCount   = threatBase.length - threatCount - warnCount;
 
   if (logThreatFilter === 'danger') {
     conns = conns.filter(c => c.threat && c.threat.confidence !== 'low');
@@ -245,8 +254,7 @@ function renderLogView() {
   const safeActive   = logThreatFilter === 'safe'   ? ' log-filter-active' : '';
   const warnActive   = logThreatFilter === 'warn'   ? ' log-filter-active' : '';
   const dangerActive = logThreatFilter === 'danger' ? ' log-filter-active' : '';
-  const pageSuffix = logFetchAllMode ? '' : `<span style="font-size:10px;color:var(--muted)"> (${t('log.page') || 'ページ'})</span>`;
-  threatCountEl.innerHTML = `<span class="log-badge-safe log-badge-clickable${safeActive}" id="log-filter-safe">${t('log.badge.safe')}: ${safeCount}</span> <span class="log-badge-warn log-badge-clickable${warnActive}" id="log-filter-warn">${t('log.badge.warn')}: ${warnCount}</span> <span class="log-badge-danger log-badge-clickable${dangerActive}" id="log-filter-danger">${t('log.badge.danger')}: ${threatCount}</span>${pageSuffix}`;
+  threatCountEl.innerHTML = `<span class="log-badge-safe log-badge-clickable${safeActive}" id="log-filter-safe">${t('log.badge.safe')}: ${safeCount}</span> <span class="log-badge-warn log-badge-clickable${warnActive}" id="log-filter-warn">${t('log.badge.warn')}: ${warnCount}</span> <span class="log-badge-danger log-badge-clickable${dangerActive}" id="log-filter-danger">${t('log.badge.danger')}: ${threatCount}</span>`;
   document.getElementById('log-filter-safe')?.addEventListener('click', () => {
     logThreatFilter = logThreatFilter === 'safe' ? null : 'safe'; logPage = 0; fetchLogPage();
   });
