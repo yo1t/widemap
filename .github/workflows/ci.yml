@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: '17 3 * * 1'
 
 jobs:
   test:
@@ -50,3 +53,35 @@ jobs:
 
       - name: Secret scan
         run: npm run security:secrets
+
+  smoke:
+    name: Browser smoke tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Start EgressView
+        run: |
+          PORT=3002 npm start > server.log 2>&1 &
+          for i in {1..30}; do
+            if curl -fsS http://localhost:3002 > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat server.log
+          exit 1
+
+      - name: Run smoke tests
+        run: npm run test:smoke

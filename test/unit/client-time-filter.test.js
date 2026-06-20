@@ -180,4 +180,41 @@ describe('client time filter fetchConnectionRange', () => {
 
     assert.equal(calls.filter(c => c[0] === 'buildGraphFromConnections').length, 2);
   });
+
+  it('refreshCurrentTimeFilterView fetches older data before rendering stats for a 2 week period', async () => {
+    const now = Date.now();
+    const calls = [];
+    const ctx = loadTimeFilterVm([], {
+      calls,
+      apiFetch: async url => {
+        calls.push(['apiFetch', String(url)]);
+        return {
+          ok: true,
+          json: async () => ({
+            connections: [{
+              src: '192.0.2.50', dst: '203.0.113.50', dport: 443, proto: 'TCP',
+              firstSeen: now - 10 * 86_400_000, lastSeen: now - 10 * 86_400_000,
+            }],
+            serverTime: now,
+          }),
+        };
+      },
+    });
+    vm.runInContext(`
+      statsMode = true;
+      currentTimeFilter = '14d';
+      dataRangeFrom = ${now - 86_400_000};
+    `, ctx);
+
+    await vm.runInContext('refreshCurrentTimeFilterView()', ctx);
+
+    assert.equal(calls.some(c => c[0] === 'apiFetch'), true);
+    assert.equal(calls.filter(c => c[0] === 'updateStats').length, 2);
+    const result = vm.runInContext(`({
+      dataRangeFrom,
+      visible: getFilteredConnections().some(c => c.dst === '203.0.113.50'),
+    })`, ctx);
+    assert.equal(result.dataRangeFrom < now - 86_400_000, true);
+    assert.equal(result.visible, true);
+  });
 });

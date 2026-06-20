@@ -7,7 +7,50 @@
     "url": "https://github.com/yo1t"
   },
   "license": "AGPL-3.0-only",
+  "homepage": "https://yo1t.github.io/egressview/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yo1t/egressview.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yo1t/egressview/issues"
+  },
+  "keywords": [
+    "network-monitoring",
+    "egress",
+    "home-network",
+    "soho",
+    "security",
+    "yamaha-rtx",
+    "iot",
+    "threat-intelligence"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "main": "server.js",
+  "files": [
+    "server.js",
+    "public/",
+    "src/",
+    "scripts/",
+    "docs/*.md",
+    "docs/*.png",
+    "index.html",
+    "index.ja.html",
+    "sitemap.xml",
+    "_config.yml",
+    ".env.example",
+    ".egressview.json.example",
+    "README.md",
+    "README.ja.md",
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "ROADMAP.ja.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "LICENSE"
+  ],
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
@@ -17,7 +60,8 @@
     "test:smoke": "playwright test",
     "security:audit": "npm audit --omit=dev --audit-level=moderate",
     "security:secrets": "node scripts/secret-scan.js",
-    "security:check": "npm run security:audit && npm run security:secrets"
+    "security:check": "npm run security:audit && npm run security:secrets",
+    "release:check": "npm run test:unit && npm run security:check && npm pack --dry-run"
   },
   "dependencies": {
     "axios": "^1.7.0",

@@ -24,7 +24,10 @@ function switchView(view) {
   document.getElementById('btn-notif-log').classList.toggle('active', view === 'notif-log');
   document.body.classList.toggle('is-stats-mode', view === 'stats');
   if (view === 'graph')     requestAnimationFrame(scheduleGraphAutoFit);
-  if (view === 'stats')     requestAnimationFrame(updateStats);
+  if (view === 'stats')     requestAnimationFrame(() => {
+    if (typeof refreshCurrentTimeFilterView === 'function') refreshCurrentTimeFilterView();
+    else updateStats();
+  });
   else { if (typeof stStopSpin === 'function') stStopSpin(); if (typeof stStopFlatAnim === 'function') stStopFlatAnim(); }
   if (view === 'log')       requestAnimationFrame(() => { updateLogView(); loadBeacons(); });
   if (view === 'devices')   requestAnimationFrame(loadDevicesView);

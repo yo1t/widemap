@@ -186,7 +186,7 @@ test('time filter change produces no console errors', async ({ page }) => {
   await authPage(page);
 
   const select = page.locator('#time-filter-select');
-  for (const value of ['24h', '6h', '7d', '1h']) {
+  for (const value of ['24h', '6h', '7d', '14d', '1h']) {
     await select.selectOption(value);
     await page.waitForTimeout(500);
   }

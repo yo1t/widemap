@@ -13,6 +13,10 @@ No new hardware. No inline traffic interception. Works via your existing Yamaha 
 
 ---
 
+## Project Status
+
+EgressView is production-oriented for Yamaha RTX based home/SOHO networks. ASUS AP support and optional data sources are maintained as companion integrations. Other router families are tracked on the roadmap. Security fixes are applied to `main`; run `npm run release:check` before publishing or tagging a release.
+
 ## For Home / SOHO Security
 
 Modern home and SOHO networks run 20–40 devices: smart TVs, IP cameras, NAS drives, Wi-Fi speakers, printers, network switches, PCs, and smartphones. Many of these — especially IoT equipment — update infrequently and have unknown outbound behaviors. Any of them can be silently compromised and begin exfiltrating data or relaying traffic for a botnet.

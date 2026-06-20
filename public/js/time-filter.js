@@ -36,12 +36,17 @@ function renderTimeFilteredViews({ delayedData = false } = {}) {
   updateConnPanel(selNode?.client?.ip || null);
 }
 
+function timeFilterNeedsFetch() {
+  const { from } = getTimeRange();
+  return from === null || from < dataRangeFrom;
+}
+
 async function applyTimeFilter() {
   const generation = ++timeFilterGeneration;
   const { from, to } = getTimeRange();
   const now = Date.now() + serverTimeOffset;
   const rangeMs = from == null ? Infinity : Math.max(0, (to ?? now) - from);
-  const needsFetch = from === null || from < dataRangeFrom;
+  const needsFetch = timeFilterNeedsFetch();
   const delayedData = needsFetch || rangeMs > 24 * 3600_000;
 
   // Log view fetches its own data from the API independently — start it immediately
@@ -57,6 +62,16 @@ async function applyTimeFilter() {
     renderTimeFilteredViews({ delayedData });
   } else {
     renderTimeFilteredViews({ delayedData });
+  }
+}
+
+function refreshCurrentTimeFilterView() {
+  if (timeFilterNeedsFetch()) {
+    return applyTimeFilter();
+  } else {
+    renderTimeFilteredViews();
+    if (logMode) updateLogView();
+    return Promise.resolve();
   }
 }
 
