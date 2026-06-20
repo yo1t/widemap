@@ -41,6 +41,11 @@ class FakeElement {
   focus() {}
   getBoundingClientRect() { return { bottom: 10, left: 10 }; }
   querySelector() { return this._sortIcon || null; }
+  remove() {}
+  appendChild() {}
+  insertAdjacentHTML(position, html) {
+    if (position === 'beforeend') this._innerHTML += String(html);
+  }
 }
 
 function makeHarness({ rows = [], apiFetch = null } = {}) {

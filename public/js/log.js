@@ -3,12 +3,14 @@ const logSortState = { col: 'lastSeen', dir: 'desc' };
 const logFilters = {}; // col → { mode, value }
 let logThreatFilter = null; // null | 'safe' | 'warn' | 'danger'
 
-// ── Pagination state ──────────────────────────────────────────────────────────
+// ── Infinite-scroll state ─────────────────────────────────────────────────────
 let logPage = 0;
 const LOG_PAGE_SIZE = 200;
 let logTotal = 0;
-let logPageData = []; // current page's data from server
+let logAllData = [];         // rows accumulated across all pages loaded so far
 let logFetchGeneration = 0;
+let logFetchingPage = false; // lock: prevents duplicate scroll-triggered fetches
+let logScrollObserver = null;
 
 // Columns handled server-side (DB columns). Everything else is client-side only.
 const LOG_SERVER_SORT_COLS   = new Set(['lastSeen', 'src', 'dst', 'dport', 'proto', 'country', 'org']);
@@ -58,34 +60,9 @@ function logMatchFilter(value, filter) {
   }
 }
 
-// ── Pagination UI ─────────────────────────────────────────────────────────────
-function renderPagination() {
-  const el = document.getElementById('log-pagination');
-  if (!el) return;
-  // When fetching all rows for client-side filtering, pagination is meaningless
-  if (logFetchAllMode) { el.style.display = 'none'; return; }
-  const totalPages = Math.max(1, Math.ceil(logTotal / LOG_PAGE_SIZE));
-  if (totalPages <= 1 && logTotal <= LOG_PAGE_SIZE) { el.style.display = 'none'; return; }
-  el.style.display = 'flex';
-  const prevDisabled = logPage === 0            ? 'disabled' : '';
-  const nextDisabled = logPage >= totalPages - 1 ? 'disabled' : '';
-  el.innerHTML = `
-    <button id="log-page-prev" ${prevDisabled} style="padding:2px 8px;font-size:11px;cursor:pointer">&laquo;</button>
-    <span>${logPage + 1} / ${totalPages} ${t('log.page') || 'ページ'}</span>
-    <button id="log-page-next" ${nextDisabled} style="padding:2px 8px;font-size:11px;cursor:pointer">&raquo;</button>
-    <span style="color:var(--muted)">(${t('log.total') || '合計'} ${logTotal})</span>
-  `;
-  document.getElementById('log-page-prev')?.addEventListener('click', () => {
-    if (logPage > 0) { logPage--; fetchLogPage(); }
-  });
-  document.getElementById('log-page-next')?.addEventListener('click', () => {
-    if (logPage < totalPages - 1) { logPage++; fetchLogPage(); }
-  });
-}
-
 // Returns true when active filters/sort cannot be applied server-side
 // (app, threatTag, regex mode, threat-badge).
-// selectedMac is now passed as fSrcMac to the server, so it no longer forces
+// selectedMac is passed as fSrcMac to the server, so it no longer forces
 // a full client-side fetch.
 function hasClientSideOnlyFilter() {
   if (logThreatFilter !== null) return true;
@@ -103,7 +80,9 @@ let logFetchAllMode = false; // true while a client-side-only filter is active
 // ── Server fetch ──────────────────────────────────────────────────────────────
 async function fetchLogPage() {
   if (!logMode) return;
-  const generation = ++logFetchGeneration;
+  if (logFetchingPage) return;
+  logFetchingPage = true;
+  const gen = logFetchGeneration;
   logFetchAllMode = hasClientSideOnlyFilter();
   const { from, to } = getTimeRange();
   const params = new URLSearchParams();
@@ -159,120 +138,192 @@ async function fetchLogPage() {
     const res = await apiFetch(`${_BASE}/api/connections?${params}`);
     if (!res.ok) return;
     const data = await res.json();
-    if (generation !== logFetchGeneration) return;
-    logPageData = data.connections || [];
-    logTotal = typeof data.total === 'number' ? data.total : logPageData.length;
+    if (gen !== logFetchGeneration) return;
+
+    const incoming = data.connections || [];
+    const isAppend = logPage > 0 && !logFetchAllMode;
+    if (!isAppend) {
+      logAllData = incoming;
+    } else {
+      logAllData = logAllData.concat(incoming);
+    }
+    logTotal = typeof data.total === 'number' ? data.total : logAllData.length;
     if (data.serverTime) serverTimeOffset = data.serverTime - Date.now();
-    renderLogView();
+
+    renderLogView(isAppend ? incoming : null);
+    if (!logFetchAllMode) setupScrollObserver();
   } catch (e) {
     console.error('[log] fetch failed:', e);
   } finally {
     setFetching(-1);
+    logFetchingPage = false;
   }
 }
 
-// ── Render (client-side-only filters applied on top of server page) ───────────
-function renderLogView() {
+// ── Infinite-scroll observer ──────────────────────────────────────────────────
+function setupScrollObserver() {
+  if (logScrollObserver) { logScrollObserver.disconnect(); logScrollObserver = null; }
+  // Remove old sentinel
+  document.getElementById('log-scroll-sentinel')?.remove();
+  if (logAllData.length >= logTotal) {
+    updateScrollStatus();
+    return;
+  }
+  if (typeof IntersectionObserver === 'undefined') return;
+
+  // Insert sentinel row at end of tbody
+  const tbody = document.getElementById('log-tbody');
+  if (!tbody) return;
+  const sentinel = document.createElement('tr');
+  sentinel.id = 'log-scroll-sentinel';
+  sentinel.innerHTML = '<td colspan="9" style="height:1px;padding:0;border:none"></td>';
+  tbody.appendChild(sentinel);
+
+  logScrollObserver = new IntersectionObserver(entries => {
+    if (entries[0].isIntersecting) {
+      logPage++;
+      fetchLogPage();
+    }
+  }, { rootMargin: '200px' });
+  logScrollObserver.observe(sentinel);
+  updateScrollStatus();
+}
+
+function updateScrollStatus() {
+  const el = document.getElementById('log-pagination');
+  if (!el) return;
+  if (logFetchAllMode || logAllData.length >= logTotal) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'flex';
+  el.innerHTML = `<span style="color:var(--muted);font-size:11px">${logAllData.length} / ${logTotal} ${t('log.sessions')}</span>`;
+}
+
+// ── Render (client-side-only filters applied on top of server data) ───────────
+// appendRows: array of new rows to append (null = full re-render)
+function renderLogView(appendRows) {
   if (!logMode) return;
   const tbody     = document.getElementById('log-tbody');
   const countEl   = document.getElementById('log-count');
   const threatCountEl = document.getElementById('log-threat-count');
 
-  let conns = logPageData.slice();
+  // Device filter badge + safety guard (only update in full-render mode)
+  if (appendRows === null) {
+    const deviceFilterEl = document.getElementById('log-device-filter');
+    if (selectedIp || selectedMac) {
+      if (deviceFilterEl) {
+        deviceFilterEl.style.display = 'inline';
+        const label = selectedIp || selectedMac;
+        deviceFilterEl.innerHTML = `<span style="background:var(--accent);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;cursor:pointer" title="${esc(t('log.deviceFilter.clear'))}" id="log-device-filter-clear">${esc(tVars('log.deviceFilter.only', { value: label }))}</span>`;
+        document.getElementById('log-device-filter-clear')?.addEventListener('click', () => {
+          selectedMac = null; selectedIp = null;
+          updateSideHighlight();
+          resetAndFetch();
+        });
+      }
+    } else {
+      if (deviceFilterEl) deviceFilterEl.style.display = 'none';
+    }
+  }
 
-  // Device filter badge + safety guard. Both IP and MAC filters are now applied
-  // server-side; this just ensures no stale rows slip through on page transitions.
-  const deviceFilterEl = document.getElementById('log-device-filter');
-  if (selectedIp || selectedMac) {
-    conns = conns.filter(c =>
+  // Build the list of rows to render
+  let conns;
+  if (appendRows !== null) {
+    // Append mode: server-side filters are active, no client-side filtering needed.
+    // Safety guard: ensure no stale rows slip through.
+    conns = appendRows.filter(c =>
+      !selectedMac && !selectedIp ? true :
       (selectedMac && c.srcMac === selectedMac) ||
       (!selectedMac && selectedIp && c.src === selectedIp)
     );
-    if (deviceFilterEl) {
-      deviceFilterEl.style.display = 'inline';
-      const label = selectedIp || selectedMac;
-      deviceFilterEl.innerHTML = `<span style="background:var(--accent);color:#fff;border-radius:4px;padding:1px 7px;font-size:11px;cursor:pointer" title="${esc(t('log.deviceFilter.clear'))}" id="log-device-filter-clear">${esc(tVars('log.deviceFilter.only', { value: label }))}</span>`;
-      document.getElementById('log-device-filter-clear')?.addEventListener('click', () => {
-        selectedMac = null; selectedIp = null;
-        updateSideHighlight();
-        logPage = 0; fetchLogPage();
+  } else {
+    conns = logAllData.slice();
+
+    // Client-side safety guard for device filter
+    if (selectedMac || selectedIp) {
+      conns = conns.filter(c =>
+        (selectedMac && c.srcMac === selectedMac) ||
+        (!selectedMac && selectedIp && c.src === selectedIp)
+      );
+    }
+
+    // Client-side-only column filters (app, threatTag, regex mode)
+    for (const [col, filter] of Object.entries(logFilters)) {
+      if (!filter) continue;
+      if (col === 'lastSeen' && filter.mode === 'dateRange') continue;
+      if (LOG_SERVER_FILTER_COLS.has(col) && filter.value && filter.mode !== 'regex') continue;
+      if (!filter.value && filter.mode !== 'dateRange') continue;
+      conns = conns.filter(c => logMatchFilter(getLogCellValue(c, col), filter));
+    }
+
+    // Client-side-only sort (app, threatTag columns)
+    if (!LOG_SERVER_SORT_COLS.has(logSortState.col)) {
+      const { col, dir } = logSortState;
+      conns.sort((a, b) => {
+        const av = getLogCellValue(a, col);
+        const bv = getLogCellValue(b, col);
+        return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
       });
     }
-  } else {
-    if (deviceFilterEl) deviceFilterEl.style.display = 'none';
   }
 
-  // Client-side-only column filters (app, threatTag, regex mode)
-  for (const [col, filter] of Object.entries(logFilters)) {
-    if (!filter) continue;
-    // Handled server-side: DB column non-regex filters and lastSeen dateRange
-    if (col === 'lastSeen' && filter.mode === 'dateRange') continue;
-    if (LOG_SERVER_FILTER_COLS.has(col) && filter.value && filter.mode !== 'regex') continue;
-    if (!filter.value && filter.mode !== 'dateRange') continue;
-    conns = conns.filter(c => logMatchFilter(getLogCellValue(c, col), filter));
-  }
-
-  // Client-side-only sort (app, threatTag columns)
-  if (!LOG_SERVER_SORT_COLS.has(logSortState.col)) {
-    const { col, dir } = logSortState;
-    conns.sort((a, b) => {
-      const av = getLogCellValue(a, col);
-      const bv = getLogCellValue(b, col);
-      return dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-    });
-  }
-
-  // Threat counts (before badge filter)
-  // In paged mode, reuse the graph's cached allConnections (already has threat data,
-  // up to 50k rows) so counts reflect the full time range, not just the current page.
-  let threatBase = conns;
-  if (!logFetchAllMode && typeof getFilteredConnections === 'function') {
+  // Threat counts — use whichever source covers the most rows.
+  // logAllData grows as user scrolls; getFilteredConnections() (graph cache, up to 50k)
+  // is used as a supplement until logAllData exceeds it.
+  let threatBase = logAllData;
+  if (typeof getFilteredConnections === 'function') {
     let base = getFilteredConnections();
-    if (selectedMac)      base = base.filter(c => c.srcMac === selectedMac);
-    else if (selectedIp)  base = base.filter(c => c.src === selectedIp);
-    if (base.length > 0) threatBase = base;
+    if (selectedMac)     base = base.filter(c => c.srcMac === selectedMac);
+    else if (selectedIp) base = base.filter(c => c.src === selectedIp);
+    if (base.length > logAllData.length) threatBase = base;
   }
   const threatCount = threatBase.filter(c => c.threat && c.threat.confidence !== 'low').length;
   const warnCount   = threatBase.filter(c => c.threat && c.threat.confidence === 'low').length;
   const safeCount   = threatBase.length - threatCount - warnCount;
 
-  if (logThreatFilter === 'danger') {
-    conns = conns.filter(c => c.threat && c.threat.confidence !== 'low');
-  } else if (logThreatFilter === 'warn') {
-    conns = conns.filter(c => c.threat && c.threat.confidence === 'low');
-  } else if (logThreatFilter === 'safe') {
-    conns = conns.filter(c => !c.threat);
+  if (appendRows === null) {
+    if (logThreatFilter === 'danger') {
+      conns = conns.filter(c => c.threat && c.threat.confidence !== 'low');
+    } else if (logThreatFilter === 'warn') {
+      conns = conns.filter(c => c.threat && c.threat.confidence === 'low');
+    } else if (logThreatFilter === 'safe') {
+      conns = conns.filter(c => !c.threat);
+    }
   }
 
-  // In all-rows mode show "filtered / fetched"; in paged mode show server total
+  // Count display
   if (logFetchAllMode) {
-    countEl.textContent = `${conns.length} / ${logPageData.length} ${t('log.sessions')}`;
+    countEl.textContent = `${conns.length} / ${logAllData.length} ${t('log.sessions')}`;
   } else {
     countEl.textContent = `${logTotal} ${t('log.sessions')}`;
   }
+
   threatCountEl.style.display = 'inline';
   const safeActive   = logThreatFilter === 'safe'   ? ' log-filter-active' : '';
   const warnActive   = logThreatFilter === 'warn'   ? ' log-filter-active' : '';
   const dangerActive = logThreatFilter === 'danger' ? ' log-filter-active' : '';
   threatCountEl.innerHTML = `<span class="log-badge-safe log-badge-clickable${safeActive}" id="log-filter-safe">${t('log.badge.safe')}: ${safeCount}</span> <span class="log-badge-warn log-badge-clickable${warnActive}" id="log-filter-warn">${t('log.badge.warn')}: ${warnCount}</span> <span class="log-badge-danger log-badge-clickable${dangerActive}" id="log-filter-danger">${t('log.badge.danger')}: ${threatCount}</span>`;
   document.getElementById('log-filter-safe')?.addEventListener('click', () => {
-    logThreatFilter = logThreatFilter === 'safe' ? null : 'safe'; logPage = 0; fetchLogPage();
+    logThreatFilter = logThreatFilter === 'safe' ? null : 'safe'; resetAndFetch();
   });
   document.getElementById('log-filter-warn')?.addEventListener('click', () => {
-    logThreatFilter = logThreatFilter === 'warn' ? null : 'warn'; logPage = 0; fetchLogPage();
+    logThreatFilter = logThreatFilter === 'warn' ? null : 'warn'; resetAndFetch();
   });
   document.getElementById('log-filter-danger')?.addEventListener('click', () => {
-    logThreatFilter = logThreatFilter === 'danger' ? null : 'danger'; logPage = 0; fetchLogPage();
+    logThreatFilter = logThreatFilter === 'danger' ? null : 'danger'; resetAndFetch();
   });
 
-  // Sort icon state
-  document.querySelectorAll('#log-table th').forEach(th => {
-    const icon = th.querySelector('.log-sort-icon');
-    if (!icon) return;
-    icon.className = 'log-sort-icon' + (th.dataset.col === logSortState.col ? ` ${logSortState.dir}` : '');
-  });
+  // Sort icon state (full render only)
+  if (appendRows === null) {
+    document.querySelectorAll('#log-table th').forEach(th => {
+      const icon = th.querySelector('.log-sort-icon');
+      if (!icon) return;
+      icon.className = 'log-sort-icon' + (th.dataset.col === logSortState.col ? ` ${logSortState.dir}` : '');
+    });
+  }
 
-  tbody.innerHTML = conns.map(c => {
+  const rowsHtml = conns.map(c => {
     const isThreat  = !!c.threat;
     const isLowConf = isThreat && c.threat.confidence === 'low';
     let threatTagCell;
@@ -306,14 +357,29 @@ function renderLogView() {
     </tr>`;
   }).join('');
 
-  renderPagination();
+  if (appendRows !== null) {
+    // Append: remove old sentinel (if any), add new rows, observer will re-add sentinel
+    document.getElementById('log-scroll-sentinel')?.remove();
+    tbody.insertAdjacentHTML('beforeend', rowsHtml);
+  } else {
+    tbody.innerHTML = rowsHtml;
+  }
 }
 
-// ── Public entry point: reset to page 0 and re-fetch from server ──────────────
-function updateLogView() {
+// ── Public entry point: reset to page 0 and re-fetch ─────────────────────────
+function resetAndFetch() {
   if (!logMode) return;
+  if (logScrollObserver) { logScrollObserver.disconnect(); logScrollObserver = null; }
+  document.getElementById('log-scroll-sentinel')?.remove();
   logPage = 0;
+  logAllData = [];
+  logFetchGeneration++;
+  logFetchingPage = false; // cancel any in-flight scroll fetch
   fetchLogPage();
+}
+
+function updateLogView() {
+  resetAndFetch();
 }
 
 // ── Sort: click on column header ──────────────────────────────────────────────
@@ -329,8 +395,7 @@ document.querySelectorAll('#log-table th[data-col]').forEach(th => {
     }
     // Always re-fetch: server-side cols change ORDER BY, client-only cols (app,
     // threatTag) need full-fetch mode so sorting covers the entire result set
-    logPage = 0;
-    fetchLogPage();
+    resetAndFetch();
   });
 });
 
@@ -404,8 +469,7 @@ document.getElementById('log-search-apply').addEventListener('click', () => {
 
   // Always re-fetch: server-side filters change the query, client-side filters
   // may switch to full-fetch mode (logFetchAllMode) via hasClientSideOnlyFilter()
-  logPage = 0;
-  fetchLogPage();
+  resetAndFetch();
 });
 
 document.getElementById('log-search-clear').addEventListener('click', () => {
@@ -417,7 +481,7 @@ document.getElementById('log-search-clear').addEventListener('click', () => {
   document.getElementById('log-search-from').value = '';
   document.getElementById('log-search-to').value   = '';
   logSearchPopup.classList.add('hidden');
-  logPage = 0; fetchLogPage();
+  resetAndFetch();
 });
 
 document.getElementById('log-search-close').addEventListener('click', () => {

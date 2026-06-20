@@ -195,7 +195,7 @@ describe('Connection Log pagination/filter invariants', () => {
       "document.getElementById('log-search-apply').addEventListener",
       "document.getElementById('log-search-clear').addEventListener"
     );
-    assert.match(handler, /fetchLogPage\(\)/,
+    assert.match(handler, /resetAndFetch\(\)/,
       'app/threatTag/regex filters need a refetch so they can enter full-fetch mode');
     assert.doesNotMatch(handler, /renderLogView\(\)/,
       'search apply must not render only the current page after changing filters');
@@ -204,7 +204,7 @@ describe('Connection Log pagination/filter invariants', () => {
   it('threat badge filters refetch instead of filtering only the current page', () => {
     const section = snippetBetween('threatCountEl.innerHTML', '// Sort icon state');
     for (const id of ['safe', 'warn', 'danger']) {
-      const re = new RegExp(`log-filter-${id}[\\s\\S]*?fetchLogPage\\(\\)`);
+      const re = new RegExp(`log-filter-${id}[\\s\\S]*?resetAndFetch\\(\\)`);
       assert.match(section, re, `${id} threat badge should refetch before applying badge filter`);
     }
     assert.doesNotMatch(section, /renderLogView\(\)/,
@@ -216,7 +216,7 @@ describe('Connection Log pagination/filter invariants', () => {
       "document.querySelectorAll('#log-table th[data-col]').forEach",
       '// ── Search popup logic'
     );
-    assert.match(handler, /fetchLogPage\(\)/,
+    assert.match(handler, /resetAndFetch\(\)/,
       'sorting app/threatTag should refetch and use full-fetch mode before sorting');
     assert.doesNotMatch(handler, /renderLogView\(\)/,
       'header sort must not sort only the currently loaded page');
