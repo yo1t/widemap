@@ -33,6 +33,9 @@ node_modules/
 .oui_cache.txt
 server.log
 *.log
+# デプロイ用スクリプト（環境固有）
+scripts/deploy-ec2.sh
+scripts/start.sh
 # 個人的なバックログ
 backlog.md
 # SNS投稿用ドラフト（未公開）

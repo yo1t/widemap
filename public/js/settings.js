@@ -614,8 +614,19 @@ document.getElementById('backup-create-btn').addEventListener('click', async () 
   }
 });
 
-function backupDownload(name) {
-  window.open(_BASE+'/api/backup/download/' + encodeURIComponent(name));
+async function backupDownload(name) {
+  try {
+    const r = await apiFetch(_BASE+'/api/backup/download/' + encodeURIComponent(name));
+    if (!r.ok) { showStatus('backup-action-status', 'Download failed: ' + r.status, false); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (e) {
+    showStatus('backup-action-status', 'Download failed: ' + e.message, false);
+  }
 }
 
 async function backupRestore(name) {
