@@ -28,6 +28,7 @@ node_modules/
 # demo DB is committed to git (WAL/SHM only excluded)
 .egressview.demo.db-wal
 .egressview.demo.db-shm
+.egressview-demo-backups/
 .egressview-upload-temp.db
 .egressview.notes.json
 .oui_cache.txt

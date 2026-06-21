@@ -60,6 +60,8 @@ const CONFIG_FILE       = require('./src/config').DEFAULT_CONFIG_FILE;
 // explored without real router hardware (used in CI for Playwright smoke tests).
 const DEMO_MODE       = process.env.DEMO_MODE === 'true';
 const DEMO_ADMIN_TOKEN = process.env.DEMO_ADMIN_TOKEN || 'demo-token-ci';
+const DEMO_DB_PATH     = path.join(__dirname, '.egressview.demo.db');
+const DEMO_BACKUP_DIR  = path.join(__dirname, '.egressview-demo-backups');
 
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────
@@ -659,12 +661,14 @@ dhcpdSyslog.configure({
 server.listen(PORT, () => {
   logger.info(`EgressView: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
   loadConfig();
+  const runtimeDbPath = DEMO_MODE ? (process.env.EGRESSVIEW_DB_PATH || DEMO_DB_PATH) : process.env.EGRESSVIEW_DB_PATH;
+  if (runtimeDbPath) process.env.EGRESSVIEW_DB_PATH = runtimeDbPath;
 
   if (DEMO_MODE) {
     // Use a separate DB file for demo mode so production data is never touched.
     // If .egressview.demo.db exists (committed to git), start from that snapshot.
     // Otherwise fall back to a fresh in-memory-style DB at the demo path.
-    if (!process.env.EGRESSVIEW_DB_PATH) process.env.EGRESSVIEW_DB_PATH = path.join(__dirname, '.egressview.demo.db');
+    backup.configure({ dbPath: runtimeDbPath, backupDir: DEMO_BACKUP_DIR });
     // Override token with a known value so CI / contributors can authenticate
     appState.adminToken = DEMO_ADMIN_TOKEN;
     logger.info(`[demo] DEMO_MODE active — admin token: ${DEMO_ADMIN_TOKEN}`);
@@ -673,11 +677,11 @@ server.listen(PORT, () => {
   }
   ensureLoginPassword();
 
-  sessions.initDb();
+  sessions.initDb(runtimeDbPath);
   setInterval(() => sessions.pruneExpired(), 6 * 60 * 60 * 1000);
   notes.load();
   history.setRetentionDays(appState.retentionDays);
-  history.loadConnectionHistory(process.env.EGRESSVIEW_DB_PATH);
+  history.loadConnectionHistory(runtimeDbPath);
 
   if (DEMO_MODE) {
     const { seedDemoConnections } = require('./scripts/demo-seed');
@@ -686,14 +690,14 @@ server.listen(PORT, () => {
   }
 
   runtime.setKnownMacs(history.getKnownMacs());
-  devices.initDb();
+  devices.initDb(runtimeDbPath);
   devices.seedFromConnectionHistory(history.getConnectionHistory());
   const staleChecked = devices.checkStaleMergeCandidates();
   if (staleChecked > 0) {
     logger.info(`[devices] stale merge check: ${staleChecked} device(s) scanned for duplicates`);
   }
-  enrichment.initDb();
-  beacons.initDb();
+  enrichment.initDb(runtimeDbPath);
+  beacons.initDb(runtimeDbPath);
 
   if (!DEMO_MODE) {
     logger.info(`Router IP: ${asus.getRouterIp()}`);

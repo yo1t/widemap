@@ -18,6 +18,7 @@ const logJs    = fs.readFileSync(path.join(jsDir, 'log.js'), 'utf8');
 const mainJs   = fs.readFileSync(path.join(jsDir, 'main.js'), 'utf8');
 const serverJs = fs.readFileSync(path.join(__dirname, '..', '..', 'server.js'), 'utf8');
 const historyJs = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'history.js'), 'utf8');
+const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf8'));
 
 // Collect JS by following every <script src="__BASE__/js/..."> tag in load order.
 // Falls back to any inline <script> block (future-proofing).
@@ -233,10 +234,40 @@ describe('Server runtime invariants', () => {
       'pollYamahaConnections must not reschedule with a hard-coded 60000 ms');
   });
 
-  it('demo mode passes EGRESSVIEW_DB_PATH explicitly to history.loadConnectionHistory', () => {
-    assert.match(serverJs, /history\.loadConnectionHistory\(process\.env\.EGRESSVIEW_DB_PATH\)/,
-      'demo mode DB isolation depends on passing the selected DB path after env setup');
+  it('demo mode passes the selected runtime DB path to every SQLite-backed store', () => {
+    assert.match(serverJs, /const\s+runtimeDbPath\s*=\s*DEMO_MODE\s*\?/,
+      'server startup should choose one runtime DB path before initializing stores');
+    for (const call of [
+      'sessions.initDb(runtimeDbPath)',
+      'history.loadConnectionHistory(runtimeDbPath)',
+      'devices.initDb(runtimeDbPath)',
+      'enrichment.initDb(runtimeDbPath)',
+      'beacons.initDb(runtimeDbPath)',
+    ]) {
+      assert.match(serverJs, new RegExp(call.replace(/[().]/g, '\\$&')),
+        `${call} should use the selected runtime DB path`);
+    }
     assert.match(historyJs, /function\s+loadConnectionHistory\(dbPath\)\s*{[\s\S]*initDb\(dbPath\)/,
       'history.loadConnectionHistory must accept and pass through an explicit DB path');
+  });
+
+  it('demo mode configures backup to use the selected runtime DB path', () => {
+    assert.match(serverJs, /backup\.configure\(\{\s*dbPath:\s*runtimeDbPath,\s*backupDir:\s*DEMO_BACKUP_DIR\s*\}\)/,
+      'demo mode backups should not read or write the production DB/backup directory');
+  });
+});
+
+describe('npm package invariants', () => {
+  it('does not publish local-only EC2 deployment scripts', () => {
+    assert(!pkg.files.includes('scripts/'), 'package files must not include the whole scripts/ directory');
+    assert(!pkg.files.includes('scripts/deploy-ec2.sh'), 'local EC2 deploy script must not be published');
+    assert(!pkg.files.includes('scripts/start.sh'), 'local start helper must not be published');
+    assert.equal(pkg.scripts['deploy:ec2'], undefined, 'local EC2 deploy command should not be exposed as an npm script');
+  });
+
+  it('still publishes scripts required by package scripts and demo tooling', () => {
+    for (const file of ['scripts/secret-scan.js', 'scripts/gen-demo-db.js', 'scripts/demo-seed.js']) {
+      assert(pkg.files.includes(file), `${file} should remain in the npm package`);
+    }
   });
 });

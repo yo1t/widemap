@@ -17,6 +17,8 @@ let backupIntervalHours = 24; // default: daily
 let maxGenerations = 7;       // default: 7 backups
 
 function configure(cfg) {
+  if (cfg.dbPath) DB_PATH = cfg.dbPath;
+  if (cfg.backupDir) BACKUP_DIR = cfg.backupDir;
   if (cfg.intervalHours) backupIntervalHours = cfg.intervalHours;
   if (cfg.maxGenerations) maxGenerations = cfg.maxGenerations;
 }
