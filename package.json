@@ -64,7 +64,9 @@
     "security:secrets": "node scripts/secret-scan.js",
     "security:check": "npm run security:audit && npm run security:secrets",
     "release:check": "npm run test:unit && npm run security:check && npm pack --dry-run",
-    "mcp": "node mcp-server.js"
+    "mcp": "node mcp-server.js",
+    "gen:demo-db": "node scripts/gen-demo-db.js",
+    "deploy:ec2": "bash scripts/deploy-ec2.sh"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
