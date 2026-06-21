@@ -105,7 +105,8 @@ socket.on('connections-update', data => {
     updateOrgGraph();
   }
   if (statsMode) updateStats();
-  if (logMode) updateLogView();
+  // Log view fetches independently from the API on tab-switch and filter changes;
+  // calling updateLogView() here would reset pagination every 2 s and break scroll.
   // Immediately update the panel for the currently selected device
   const selNode = nodes.find(n => n.id === selectedMac);
   const selIp   = selNode?.client?.ip || null;
@@ -130,7 +131,6 @@ socket.on('connections-update', data => {
         else if (!asusActive) buildGraphFromConnections(); else updateOrgGraph();
         scheduleGraphAutoFit({ delayedData: true });
         if (statsMode) updateStats();
-        if (logMode) updateLogView();
       })
       .catch(e => console.warn('[connections] background 24h fetch failed:', e))
       .finally(() => setFetching(-1));
