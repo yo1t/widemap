@@ -1,0 +1,227 @@
+// Unit tests for src/routes/slack.js
+'use strict';
+
+const { describe, it } = require('node:test');
+const assert = require('node:assert/strict');
+const http   = require('node:http');
+const { Readable, Writable } = require('node:stream');
+const express = require('express');
+
+const slackRoutes = require('../../src/routes/slack');
+
+const requireAdmin = (req, res, next) => next();
+
+const defaultNotifier = {
+  getConfig:   () => ({ enabled: false, userId: '', cooldownMinutes: 5 }),
+  configure:   () => {},
+  test:        async () => ({ ok: true }),
+  verifyToken: async () => ({ ok: true, botName: 'EgressBot' }),
+  lookupUser:  async () => ({ ok: true, userId: 'U12345' }),
+};
+
+function makeApp(overrides = {}) {
+  const ctx = {
+    notifier:      defaultNotifier,
+    saveConfig:    () => {},
+    persistSecret: () => {},
+    loadConfig:    () => ({}),
+    ...overrides,
+  };
+  const app = express();
+  app.use(express.json());
+  app.use('/api', slackRoutes({ requireAdmin, ...ctx }));
+  return app;
+}
+
+function req(app, method, path, body = null) {
+  return new Promise((resolve, reject) => {
+    const payload = body == null ? null : Buffer.from(JSON.stringify(body));
+    const request = new Readable({
+      read() {
+        if (payload) this.push(payload);
+        this.push(null);
+      },
+    });
+    request.method = method;
+    request.url = path;
+    request.headers = {};
+    if (payload) {
+      request.headers['content-type'] = 'application/json';
+      request.headers['content-length'] = String(payload.length);
+    }
+
+    const response = new http.ServerResponse(request);
+    const chunks = [];
+    const socket = new Writable({
+      write(chunk, enc, cb) { chunks.push(Buffer.from(chunk)); cb(); },
+    });
+    socket.cork = () => {};
+    socket.uncork = () => {};
+    socket.setTimeout = () => {};
+    socket.destroy = () => {};
+    response.assignSocket(socket);
+    response.on('finish', () => {
+      const raw = Buffer.concat(chunks).toString();
+      const text = raw.split('\r\n\r\n').slice(1).join('\r\n\r\n');
+      resolve({ status: response.statusCode, body: JSON.parse(text || 'null') });
+    });
+    app.handle(request, response, reject);
+  });
+}
+
+// ─── GET /api/config/slack ────────────────────────────────────────────────────
+
+describe('slack route: GET /api/config/slack', () => {
+  it('returns notifier config with displayName from loadConfig', async () => {
+    const app = makeApp({ loadConfig: () => ({ slack: { displayName: 'MyBot' } }) });
+    const { status, body } = await req(app, 'GET', '/api/config/slack');
+    assert.equal(status, 200);
+    assert.equal(body.config.displayName, 'MyBot');
+  });
+
+  it('returns empty displayName when loadConfig throws', async () => {
+    const app = makeApp({ loadConfig: () => { throw new Error('fail'); } });
+    const { status, body } = await req(app, 'GET', '/api/config/slack');
+    assert.equal(status, 200);
+    assert.equal(body.config.displayName, '');
+  });
+
+  it('returns empty displayName when loadConfig returns no slack key', async () => {
+    const app = makeApp({ loadConfig: () => ({}) });
+    const { status, body } = await req(app, 'GET', '/api/config/slack');
+    assert.equal(status, 200);
+    assert.equal(body.config.displayName, '');
+  });
+});
+
+// ─── POST /api/config/slack ───────────────────────────────────────────────────
+
+describe('slack route: POST /api/config/slack', () => {
+  it('calls saveConfig and returns success', async () => {
+    let saved = false;
+    const app = makeApp({ saveConfig: () => { saved = true; } });
+    const { status, body } = await req(app, 'POST', '/api/config/slack', { enabled: true });
+    assert.equal(status, 200);
+    assert.equal(body.success, true);
+    assert.equal(saved, true);
+  });
+
+  it('calls persistSecret with token when token is provided', async () => {
+    let captured;
+    const app = makeApp({ persistSecret: (section, updates) => { captured = { section, updates }; } });
+    await req(app, 'POST', '/api/config/slack', { token: 'xoxb-test-token' });
+    assert.equal(captured.section, 'slack');
+    assert.equal(captured.updates.token, 'xoxb-test-token');
+  });
+
+  it('calls persistSecret with displayName when displayName is provided', async () => {
+    let captured;
+    const app = makeApp({ persistSecret: (section, updates) => { captured = { section, updates }; } });
+    await req(app, 'POST', '/api/config/slack', { displayName: 'AlertBot' });
+    assert.equal(captured.updates.displayName, 'AlertBot');
+  });
+
+  it('does not call persistSecret when neither token nor displayName is provided', async () => {
+    let called = false;
+    const app = makeApp({ persistSecret: () => { called = true; } });
+    await req(app, 'POST', '/api/config/slack', { enabled: true, cooldownMinutes: 10 });
+    assert.equal(called, false);
+  });
+
+  it('returns displayName from loadConfig in response', async () => {
+    const app = makeApp({ loadConfig: () => ({ slack: { displayName: 'Saved' } }) });
+    const { body } = await req(app, 'POST', '/api/config/slack', {});
+    assert.equal(body.config.displayName, 'Saved');
+  });
+});
+
+// ─── POST /api/slack/test ─────────────────────────────────────────────────────
+
+describe('slack route: POST /api/slack/test', () => {
+  it('returns success: true when notifier.test() resolves ok', async () => {
+    const app = makeApp();
+    const { status, body } = await req(app, 'POST', '/api/slack/test', {});
+    assert.equal(status, 200);
+    assert.equal(body.success, true);
+  });
+
+  it('returns 400 when notifier.test() returns ok: false', async () => {
+    const app = makeApp({
+      notifier: { ...defaultNotifier, test: async () => ({ ok: false, error: 'invalid_token' }) },
+    });
+    const { status, body } = await req(app, 'POST', '/api/slack/test', {});
+    assert.equal(status, 400);
+    assert.equal(body.error, 'invalid_token');
+  });
+
+  it('returns 500 when notifier.test() throws', async () => {
+    const app = makeApp({
+      notifier: { ...defaultNotifier, test: async () => { throw new Error('network error'); } },
+    });
+    const { status } = await req(app, 'POST', '/api/slack/test', {});
+    assert.equal(status, 500);
+  });
+});
+
+// ─── POST /api/slack/verify ───────────────────────────────────────────────────
+
+describe('slack route: POST /api/slack/verify', () => {
+  it('passes provided token to verifyToken', async () => {
+    let captured;
+    const app = makeApp({
+      notifier: { ...defaultNotifier, verifyToken: async (t) => { captured = t; return { ok: true }; } },
+    });
+    await req(app, 'POST', '/api/slack/verify', { token: 'xoxb-provided' });
+    assert.equal(captured, 'xoxb-provided');
+  });
+
+  it('falls back to loadConfig token when no token in body', async () => {
+    let captured;
+    const app = makeApp({
+      loadConfig: () => ({ slack: { token: 'xoxb-from-config' } }),
+      notifier:   { ...defaultNotifier, verifyToken: async (t) => { captured = t; return { ok: true }; } },
+    });
+    await req(app, 'POST', '/api/slack/verify', {});
+    assert.equal(captured, 'xoxb-from-config');
+  });
+
+  it('returns 500 when verifyToken throws', async () => {
+    const app = makeApp({
+      notifier: { ...defaultNotifier, verifyToken: async () => { throw new Error('err'); } },
+    });
+    const { status } = await req(app, 'POST', '/api/slack/verify', { token: 'x' });
+    assert.equal(status, 500);
+  });
+});
+
+// ─── POST /api/slack/lookup-user ─────────────────────────────────────────────
+
+describe('slack route: POST /api/slack/lookup-user', () => {
+  it('passes username and provided token to lookupUser', async () => {
+    let captured;
+    const app = makeApp({
+      notifier: { ...defaultNotifier, lookupUser: async (u, t) => { captured = { u, t }; return { ok: true }; } },
+    });
+    await req(app, 'POST', '/api/slack/lookup-user', { username: 'john', token: 'xoxb-tok' });
+    assert.equal(captured.u, 'john');
+    assert.equal(captured.t, 'xoxb-tok');
+  });
+
+  it('falls back to loadConfig token when no token in body', async () => {
+    let capturedToken;
+    const app = makeApp({
+      loadConfig: () => ({ slack: { token: 'xoxb-cfg' } }),
+      notifier:   { ...defaultNotifier, lookupUser: async (u, t) => { capturedToken = t; return { ok: true }; } },
+    });
+    await req(app, 'POST', '/api/slack/lookup-user', { username: 'alice' });
+    assert.equal(capturedToken, 'xoxb-cfg');
+  });
+
+  it('returns 500 when lookupUser throws', async () => {
+    const app = makeApp({
+      notifier: { ...defaultNotifier, lookupUser: async () => { throw new Error('fail'); } },
+    });
+    const { status } = await req(app, 'POST', '/api/slack/lookup-user', { username: 'bob', token: 'x' });
+    assert.equal(status, 500);
+  });
+});
