@@ -350,7 +350,10 @@ async function investigateIp(ip, { ouiDb: ouiDbRef, yamahaExec, yamahaEnabled, y
     probeHttpBanner(ip, 8080),
     probeSsdp(ip),
     probeMdns(ip),
-    dns.reverse(ip).then(arr => arr[0]).catch(() => null),
+    Promise.race([
+      dns.reverse(ip).then(arr => arr[0]),
+      new Promise(resolve => setTimeout(() => resolve(null), 1500)),
+    ]).catch(() => null),
     probeBonjourForIp(ip, 3000),
     probeNetbios(ip),
     probeYamahaArp(ip),
