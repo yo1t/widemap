@@ -355,7 +355,7 @@ async function loadBackupList() {
       return;
     }
     listEl.innerHTML = '';
-    data.backups.reverse().forEach(b => {
+    [...data.backups].reverse().forEach(b => {
       const size = (b.size / 1024 / 1024).toFixed(1) + ' MB';
       const date = new Date(b.created).toLocaleString(currentLang === 'ja' ? 'ja-JP' : 'en-US');
       const row = document.createElement('div');
@@ -620,17 +620,17 @@ document.getElementById('backup-create-btn').addEventListener('click', async () 
   try {
     const r = await apiFetch(_BASE+'/api/backup/create', { method: 'POST' });
     const data = await r.json();
-    showStatus('backup-action-status', data.success ? '✓ ' + data.name : 'Failed', data.success);
+    showStatus('backup-action-status', data.success ? tVars('settings.backup.created', { name: data.name }) : t('settings.error.generic'), data.success);
     loadBackupList();
   } catch (e) {
-    showStatus('backup-action-status', 'Error: ' + e.message, false);
+    showStatus('backup-action-status', tVars('settings.error.withMessage', { message: e.message }), false);
   }
 });
 
 async function backupDownload(name) {
   try {
     const r = await apiFetch(_BASE+'/api/backup/download/' + encodeURIComponent(name));
-    if (!r.ok) { showStatus('backup-action-status', 'Download failed: ' + r.status, false); return; }
+    if (!r.ok) { showStatus('backup-action-status', tVars('settings.backup.downloadFailed', { detail: r.status }), false); return; }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -638,7 +638,7 @@ async function backupDownload(name) {
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   } catch (e) {
-    showStatus('backup-action-status', 'Download failed: ' + e.message, false);
+    showStatus('backup-action-status', tVars('settings.backup.downloadFailed', { detail: e.message }), false);
   }
 }
 
