@@ -17,7 +17,7 @@
   .settings-card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
+    height: 90vh; max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
   }
   .settings-header {
     display: flex; align-items: center; justify-content: space-between;
