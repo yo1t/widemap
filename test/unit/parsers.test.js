@@ -78,6 +78,23 @@ describe('parseNatDetail', () => {
   it('returns empty array for garbage input', () => {
     assert.deepEqual(parseNatDetail('some random text\nno valid lines'), []);
   });
+
+  it('skips 172.x.x.x source addresses (not supported private range)', () => {
+    const text = '  TCP  172.16.0.10.12345  1.2.3.4.80  1.2.3.4.80  600';
+    assert.deepEqual(parseNatDetail(text), []);
+  });
+
+  it('all numeric fields (sport, dport, ttl) are integers', () => {
+    const sessions = parseNatDetail(fixture);
+    for (const s of sessions) {
+      assert.equal(typeof s.sport, 'number');
+      assert.equal(typeof s.dport, 'number');
+      assert.equal(typeof s.ttl, 'number');
+      assert(Number.isInteger(s.sport));
+      assert(Number.isInteger(s.dport));
+      assert(Number.isInteger(s.ttl));
+    }
+  });
 });
 
 describe('parseNatDescriptorCandidates', () => {
@@ -93,6 +110,25 @@ nat descriptor type 200 nat
 
   it('returns an empty list when no NAT descriptor is present', () => {
     assert.deepEqual(parseNatDescriptorCandidates('show status\nno descriptors here'), []);
+  });
+
+  it('deduplicates when the same descriptor appears on multiple lines', () => {
+    const output = `
+nat descriptor type 100 masquerade
+nat descriptor address outer 100 primary
+nat descriptor type 100 nat
+`;
+    assert.deepEqual(parseNatDescriptorCandidates(output), ['100']);
+  });
+
+  it('returns empty array for null/undefined input', () => {
+    assert.deepEqual(parseNatDescriptorCandidates(null), []);
+    assert.deepEqual(parseNatDescriptorCandidates(undefined), []);
+  });
+
+  it('ignores numbers with more than 6 digits', () => {
+    const output = 'nat descriptor type 1234567 masquerade';
+    assert.deepEqual(parseNatDescriptorCandidates(output), []);
   });
 });
 
@@ -112,6 +148,28 @@ default via 203.0.113.1
 ip lan1 address 192.168.100.1/24
 `;
     assert.equal(parseLanIp(output), '192.168.100.1');
+  });
+
+  it('extracts 172.16-31.x.x addresses', () => {
+    const output = 'ip lan1 address 172.16.0.1/24';
+    assert.equal(parseLanIp(output), '172.16.0.1');
+  });
+
+  it('ignores .0 subnet addresses', () => {
+    const output = `
+ip lan1 address 192.168.1.0/24
+ip lan2 address 192.168.1.1/24
+`;
+    assert.equal(parseLanIp(output), '192.168.1.1');
+  });
+
+  it('returns empty string when no private IP found', () => {
+    assert.equal(parseLanIp('show status\nPP1  203.0.113.1  up'), '');
+  });
+
+  it('returns empty string for null/undefined input', () => {
+    assert.equal(parseLanIp(null), '');
+    assert.equal(parseLanIp(undefined), '');
   });
 });
 
