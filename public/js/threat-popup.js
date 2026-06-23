@@ -55,11 +55,13 @@ function showThreatDetail(tr) {
       <textarea id="threat-detail-note" style="width:100%;min-height:60px;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:inherit;font-size:11px;padding:8px;resize:vertical;" placeholder="${esc(t('note.placeholder'))}">${esc(existingNote)}</textarea>
     </div>
     <div style="display:flex;gap:6px;">
-      <button class="connect-btn" style="flex:1;font-size:11px;padding:5px 10px;" onclick="threatDetailInvestigate('${esc(d.src)}')">${t('note.investigate')}</button>
-      <button class="connect-btn" style="flex:1;font-size:11px;padding:5px 10px;" onclick="threatDetailSaveNote('${esc(d.src)}','${esc(d.srcMac || '')}')">${t('note.save')}</button>
+      <button id="threat-detail-investigate-btn" class="connect-btn" style="flex:1;font-size:11px;padding:5px 10px;">${t('note.investigate')}</button>
+      <button id="threat-detail-save-btn" class="connect-btn" style="flex:1;font-size:11px;padding:5px 10px;">${t('note.save')}</button>
     </div>
     <div id="threat-detail-status" style="font-size:10px;color:var(--muted);margin-top:6px;"></div>
   `;
+  document.getElementById('threat-detail-investigate-btn').addEventListener('click', () => threatDetailInvestigate(d.src));
+  document.getElementById('threat-detail-save-btn').addEventListener('click', () => threatDetailSaveNote(d.src, d.srcMac || ''));
   document.getElementById('threat-detail-overlay').classList.remove('hidden');
 }
 
@@ -93,4 +95,10 @@ async function threatDetailSaveNote(ip, mac) {
   } catch (e) {
     statusEl.textContent = t('settings.status.saveFailed') + ': ' + e.message;
   }
+}
+
+{
+  const overlay = document.getElementById('threat-detail-overlay');
+  overlay?.addEventListener('click', e => { if (e.target === overlay) overlay.classList.add('hidden'); });
+  document.getElementById('threat-detail-close')?.addEventListener('click', () => overlay?.classList.add('hidden'));
 }

@@ -657,11 +657,11 @@
       </div>
     </div>
     <!-- Threat detail popup -->
-    <div id="threat-detail-overlay" class="threat-detail-overlay hidden" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div id="threat-detail-overlay" class="threat-detail-overlay hidden">
       <div class="threat-detail-card">
         <div class="threat-detail-header">
           <span data-i18n="threat.detail.title">🚨 脅威検出 詳細</span>
-          <button class="settings-close" onclick="document.getElementById('threat-detail-overlay').classList.add('hidden')">✕</button>
+          <button id="threat-detail-close" class="settings-close">✕</button>
         </div>
         <div class="threat-detail-body" id="threat-detail-body"></div>
       </div>

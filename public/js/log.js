@@ -397,7 +397,7 @@ function renderLogView(appendRows) {
     const timeStr = c.lastSeen
       ? new Date(c.lastSeen).toLocaleString(currentLang === 'ja' ? 'ja-JP' : 'en-US', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
       : '';
-    return `<tr class="${isThreat ? (isLowConf ? 'warn-row threat-clickable' : 'threat-row threat-clickable') : ''}" ${isThreat ? `onclick="showThreatDetail(this)" data-threat='${esc(JSON.stringify({src:c.src,srcLabel,dst:c.dst,dstLabel,dport:c.dport,proto:c.proto,country:c.country||'',org:c.org||'',city:c.city||'',dstHost:c.dstHost||'',srcMac:c.srcMac||'',srcVendor:c.srcVendor||'',firstSeen:c.firstSeen||0,lastSeen:c.lastSeen||0,ttl:c.ttl||0,threat:c.threat}))}'` : ''}>
+    return `<tr class="${isThreat ? (isLowConf ? 'warn-row threat-clickable' : 'threat-row threat-clickable') : ''}" ${isThreat ? `data-threat='${esc(JSON.stringify({src:c.src,srcLabel,dst:c.dst,dstLabel,dport:c.dport,proto:c.proto,country:c.country||'',org:c.org||'',city:c.city||'',dstHost:c.dstHost||'',srcMac:c.srcMac||'',srcVendor:c.srcVendor||'',firstSeen:c.firstSeen||0,lastSeen:c.lastSeen||0,ttl:c.ttl||0,threat:c.threat}))}'` : ''}>
       <td title="${esc(c.src)}">${esc(srcLabel)}</td>
       <td title="${esc(c.dst)}">${esc(dstLabel)}</td>
       ${threatTagCell}
@@ -417,6 +417,10 @@ function renderLogView(appendRows) {
   } else {
     tbody.innerHTML = rowsHtml;
   }
+  tbody.querySelectorAll('.threat-clickable:not([data-lset])').forEach(tr => {
+    tr.dataset.lset = '1';
+    tr.addEventListener('click', () => showThreatDetail(tr));
+  });
 }
 
 // ── Public entry point: reset to page 0 and re-fetch ─────────────────────────
