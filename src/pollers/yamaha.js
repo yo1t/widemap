@@ -338,7 +338,7 @@ function connectYamaha(onReady) {
     return;
   }
   if (yamahaReconnectTimer) { clearTimeout(yamahaReconnectTimer); yamahaReconnectTimer = null; }
-  if (yamahaConn) { try { yamahaConn.removeAllListeners(); yamahaConn.end(); } catch {} yamahaConn = null; }
+  if (yamahaConn) { try { yamahaConn.removeAllListeners(); yamahaConn.on('error', () => {}); yamahaConn.end(); } catch {} yamahaConn = null; }
   yamahaReady = false;
   yamahaShell = null;
   yamahaConnecting = true;
@@ -504,13 +504,13 @@ function disconnect() {
   yamahaReady = false;
   yamahaConnecting = false;
   if (yamahaReconnectTimer) { clearTimeout(yamahaReconnectTimer); yamahaReconnectTimer = null; }
-  if (yamahaConn) { try { yamahaConn.removeAllListeners(); yamahaConn.end(); } catch {} yamahaConn = null; }
+  if (yamahaConn) { try { yamahaConn.removeAllListeners(); yamahaConn.on('error', () => {}); yamahaConn.end(); } catch {} yamahaConn = null; }
 }
 
 function reconnect() {
   yamahaReady = false;
   yamahaConnecting = false;
-  if (yamahaConn) { try { yamahaConn.removeAllListeners(); yamahaConn.end(); } catch {} yamahaConn = null; }
+  if (yamahaConn) { try { yamahaConn.removeAllListeners(); yamahaConn.on('error', () => {}); yamahaConn.end(); } catch {} yamahaConn = null; }
   scheduleYamahaReconnect(500);
 }
 
