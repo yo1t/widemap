@@ -424,6 +424,22 @@ describe('Server runtime invariants', () => {
       'map layers should only redraw after the signature is updated');
   });
 
+  it('stats maps debounce mobile resize before rebuilding map bases', () => {
+    const script = getScriptContent();
+    assert.match(script, /var\s+stMapResizeTimer\s*=\s*null/,
+      'stats maps should debounce resize-triggered rebuilds');
+    assert.match(script, /var\s+stMapSize\s*=\s*\{\s*globeW:\s*0,\s*globeH:\s*0,\s*flatW:\s*0,\s*flatH:\s*0\s*\}/,
+      'stats maps should remember their rendered size');
+    assert.match(script, /function\s+stMapSizeChangedEnough\(next\)[\s\S]*?>\s*24[\s\S]*?>\s*48/,
+      'small mobile browser chrome resizes should not rebuild map SVG bases');
+    assert.match(script, /function\s+scheduleStatsMapResize\(\)[\s\S]*?setTimeout\(\(\)\s*=>[\s\S]*?stRenderGlobeBase\(\);[\s\S]*?stRenderFlatBase\(\);[\s\S]*?250\)/,
+      'map base rebuilds should be delayed until resize settles');
+    assert.match(script, /window\.addEventListener\('resize',\s*scheduleStatsMapResize\)/,
+      'resize should use the debounced stats map handler');
+    assert.doesNotMatch(script, /window\.addEventListener\('resize',\s*\(\)\s*=>\s*\{[\s\S]*?stRenderGlobeBase\(\);\s*stRenderFlatBase\(\);/,
+      'resize must not synchronously clear and rebuild map layers');
+  });
+
   it('stats summary fetch is not retriggered every few seconds while viewing live data', () => {
     const script = getScriptContent();
     assert.match(script, /const\s+STATS_SUMMARY_CACHE_MS\s*=\s*60_000/,

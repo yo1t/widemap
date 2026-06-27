@@ -13,6 +13,8 @@ var stFlatZoom = 1, stFlatPanX = 0, stFlatPanY = 0;
 var stSelIp = null; // active device filter (null = all)
 var stMapPointOverride = null;
 var stMapRenderSignature = null;
+var stMapResizeTimer = null;
+var stMapSize = { globeW: 0, globeH: 0, flatW: 0, flatH: 0 };
 const ST_SPEEDS = [0.04, 0.08, 0.16, 0.32, 0.64];
 var stSpeedIdx = 2; // default: ST_SPEEDS[2] = 0.16
 
@@ -341,12 +343,54 @@ function initStatsMaps(resetRotation) {
   ensureWorldGeo(() => {
     if (!stRenderGlobeBase()) { requestAnimationFrame(initStatsMaps); return; }
     stRenderFlatBase();
+    stRememberMapSize();
     stRenderGlobeData();
     stRenderFlatData();
     stInitControls();
     stInitFlatControls();
     stStartSpin();
   });
+}
+
+function stReadMapSize() {
+  const globe = document.getElementById('st-globe');
+  const flat = document.getElementById('st-flat');
+  return {
+    globeW: globe?.clientWidth || 0,
+    globeH: globe?.clientHeight || 0,
+    flatW: flat?.clientWidth || 0,
+    flatH: flat?.clientHeight || 0,
+  };
+}
+
+function stRememberMapSize() {
+  stMapSize = stReadMapSize();
+}
+
+function stMapSizeChangedEnough(next) {
+  return Math.abs(next.globeW - stMapSize.globeW) > 24 ||
+    Math.abs(next.globeH - stMapSize.globeH) > 48 ||
+    Math.abs(next.flatW - stMapSize.flatW) > 24 ||
+    Math.abs(next.flatH - stMapSize.flatH) > 48;
+}
+
+function scheduleStatsMapResize() {
+  if (typeof statsMode === 'undefined' || !statsMode || !stGlobeSvg) return;
+  const next = stReadMapSize();
+  if (!next.globeW || !next.globeH || !next.flatW || !next.flatH) return;
+  if (!stMapSizeChangedEnough(next)) return;
+  if (stMapResizeTimer) clearTimeout(stMapResizeTimer);
+  stMapResizeTimer = setTimeout(() => {
+    stMapResizeTimer = null;
+    const latest = stReadMapSize();
+    if (!stMapSizeChangedEnough(latest)) return;
+    stRenderGlobeBase();
+    stRenderFlatBase();
+    stRememberMapSize();
+    stMapRenderSignature = null;
+    stRenderGlobeData();
+    stRenderFlatData();
+  }, 250);
 }
 
 function updateStatsMaps(selIp, mapPoints) {
@@ -378,12 +422,7 @@ function initStats() {
   if (initStats._done) return;
   initStats._done = true;
 
-  window.addEventListener('resize', () => {
-    if (typeof statsMode !== 'undefined' && statsMode && stGlobeSvg) {
-      stRenderGlobeBase(); stRenderFlatBase();
-      stRenderGlobeData(); stRenderFlatData();
-    }
-  });
+  window.addEventListener('resize', scheduleStatsMapResize);
   document.querySelectorAll('.chart-mode-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       chartMode = btn.dataset.mode;
