@@ -7,7 +7,7 @@ import { updateStats, initStatsMaps, resetStatsMaps } from './stats.js?v=__ASSET
 import { updateLogView } from './log.js?v=__ASSET_VERSION__';
 import { renderDevicesTable } from './devices.js?v=__ASSET_VERSION__';
 import { renderBeaconBanner } from './beacon.js?v=__ASSET_VERSION__';
-import { updateFilterTabs, lastMeshNodes, lastMainMac, lastClients } from './graph.js?v=__ASSET_VERSION__';
+import { updateFilterTabs, lastMeshNodes, lastMainMac, lastClients, setGraphDevicesDataRef } from './graph.js?v=__ASSET_VERSION__';
 import { toggleSection, settingsBtn, showStatus } from './settings.js?v=__ASSET_VERSION__';
 
 // ─── Admin token auth (saved in localStorage) ─────────────────────────
@@ -309,7 +309,7 @@ socket.on('config', cfg => {
     // Pre-load _devicesDataRef so deviceId-keyed notes (set via MCP/API) are resolvable
     // before the user visits the Devices tab.
     apiFetch(_BASE + '/api/devices').then(r => r.ok ? r.json() : null).then(json => {
-      if (json?.devices) _devicesDataRef = json.devices;
+      if (json?.devices) { _devicesDataRef = json.devices; setGraphDevicesDataRef(json.devices); }
       refreshAllNotes();
     }).catch(() => refreshAllNotes());
   }

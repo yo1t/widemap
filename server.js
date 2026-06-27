@@ -62,7 +62,8 @@ const DEMO_MODE       = process.env.DEMO_MODE === 'true';
 const DEMO_ADMIN_TOKEN = process.env.DEMO_ADMIN_TOKEN || 'demo-token-ci';
 const DEMO_DB_PATH     = path.join(__dirname, '.egressview.demo.db');
 const DEMO_BACKUP_DIR  = path.join(__dirname, '.egressview-demo-backups');
-const ASSET_VERSION    = process.env.EGRESSVIEW_ASSET_VERSION || String(Date.now());
+const _rawAssetVersion = process.env.EGRESSVIEW_ASSET_VERSION || '';
+const ASSET_VERSION    = /^[A-Za-z0-9._-]+$/.test(_rawAssetVersion) ? _rawAssetVersion : String(Date.now());
 
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────

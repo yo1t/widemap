@@ -4,19 +4,16 @@ import { _BASE } from './utils.js?v=__ASSET_VERSION__';
 import { allConnections, mergeConnections, dataRangeFrom, serverTimeOffset, setAllConnections, setDataRangeFrom, setServerTimeOffset, updateConnPanel } from './connections-panel.js?v=__ASSET_VERSION__';
 import { socket, connState, asusActive, setAsusActive, yamahaConfigured, notesMap, setNotesMap, adminToken, apiFetch, errorBanner, updateConnBadge, lookupNote, refreshAllNotes } from './auth-socket.js?v=__ASSET_VERSION__';
 import { statsMode, setViewTabHandlers } from './view-tabs.js?v=__ASSET_VERSION__';
-import { nodes, selectedMac, buildGraph, buildGraphFromConnections, updateOrgGraph, scheduleGraphAutoFit, fetchGraphSummary, clearGraphSummary, graphSummary, stopGraph, showToast, applyFilter, applyGraphFilter, lastClients } from './graph.js?v=__ASSET_VERSION__';
-import { updateStats, stStopSpin, stStopFlatAnim } from './stats.js?v=__ASSET_VERSION__';
+import { nodes, selectedMac, buildGraph, buildGraphFromConnections, updateOrgGraph, scheduleGraphAutoFit, fetchGraphSummary, clearGraphSummary, graphSummary, stopGraph, showToast, applyFilter, applyGraphFilter, lastClients, initGraph, resizeGraph, setGraphDevicesDataRef } from './graph.js?v=__ASSET_VERSION__';
+import { updateStats, stStopSpin, stStopFlatAnim, initStats } from './stats.js?v=__ASSET_VERSION__';
 import { openSettings, showStatus } from './settings.js?v=__ASSET_VERSION__';
 import { setDevicesDataRef } from './auth-socket.js?v=__ASSET_VERSION__';
-import { setGraphDevicesDataRef } from './graph.js?v=__ASSET_VERSION__';
-import { devicesData, setDevicesData } from './devices.js?v=__ASSET_VERSION__';
-import { initGraph, resizeGraph } from './graph.js?v=__ASSET_VERSION__';
-import { initStats } from './stats.js?v=__ASSET_VERSION__';
+import { devicesData, setDevicesData, initDevices, loadDevicesView, setOnDevicesLoaded, refreshDetailPanelNote } from './devices.js?v=__ASSET_VERSION__';
 import { initViewTabs } from './view-tabs.js?v=__ASSET_VERSION__';
 import { updateLogView, initLog } from './log.js?v=__ASSET_VERSION__';
-import { initDevices, loadDevicesView } from './devices.js?v=__ASSET_VERSION__';
 import { initNotifLog, loadNotifLog } from './notif-log.js?v=__ASSET_VERSION__';
 import { initTimeFilter, refreshCurrentTimeFilterView } from './time-filter.js?v=__ASSET_VERSION__';
+import { setFetching } from './connections-panel.js?v=__ASSET_VERSION__';
 import { loadBeacons } from './beacon.js?v=__ASSET_VERSION__';
 
 // ─── Cross-module reference injection ────────────────────────────────────────
@@ -24,6 +21,7 @@ import { loadBeacons } from './beacon.js?v=__ASSET_VERSION__';
 // directly (circular). Inject via setter functions.
 setDevicesDataRef(devicesData);
 setGraphDevicesDataRef(devicesData);
+setOnDevicesLoaded(data => { setDevicesDataRef(data); setGraphDevicesDataRef(data); });
 setViewTabHandlers({
   onGraph: scheduleGraphAutoFit,
   onStats: () => refreshCurrentTimeFilterView?.() || updateStats(),
@@ -40,7 +38,7 @@ socket.on('auth-required', () => {
   const banner = document.getElementById('disconnected-banner');
   banner.style.display = 'block';
   banner.querySelector('button').textContent = t('banner.button');
-  banner.querySelector('button').addEventListener('click', () => openSettings('l2'));
+  banner.querySelector('button').onclick = () => openSettings('l2');
   connState.l2.ready = false;
   connState.l2.err   = 'session-expired';
   updateConnBadge('l2');
@@ -62,7 +60,7 @@ socket.on('yamaha-status', s => {
     const banner = document.getElementById('disconnected-banner');
     banner.style.display = 'block';
     banner.querySelector('button').textContent = t('banner.yamaha');
-    banner.querySelector('button').addEventListener('click', () => openSettings('l3l4'));
+    banner.querySelector('button').onclick = () => openSettings('l3l4');
   }
   if (s.ready) {
     document.getElementById('disconnected-banner').style.display = 'none';
@@ -84,14 +82,13 @@ socket.on('notes-update', async data => {
         setDevicesData(newDevices);
         setDevicesDataRef(newDevices);
         setGraphDevicesDataRef(newDevices);
+        // Sync deviceId-keyed notes into the fresh array.
+        for (const dev of newDevices) {
+          if (dev.deviceId != null) dev.note = data.notes[dev.deviceId] ?? null;
+        }
+        refreshDetailPanelNote(newDevices);
       }
     } catch (_) { /* ignore — refreshAllNotes will still run */ }
-    // Sync deviceId-keyed notes into devicesData.
-    for (const dev of devicesData) {
-      if (dev.deviceId != null) {
-        dev.note = data.notes[dev.deviceId] ?? null;
-      }
-    }
   }
   refreshAllNotes();
 });
@@ -137,7 +134,7 @@ socket.on('connections-update', data => {
   // and merge so real-time deltas that arrived during the fetch are not lost.
   if (data.initialLoad) {
     const from24h = Date.now() - 86_400_000;
-    // setFetching(+1) is handled inside the fetch
+    setFetching(+1);
     apiFetch(`${_BASE}/api/connections?from=${from24h}`)
       .then(r => r.json())
       .then(async d => {
@@ -153,7 +150,8 @@ socket.on('connections-update', data => {
         scheduleGraphAutoFit({ delayedData: true });
         if (statsMode) updateStats();
       })
-      .catch(e => console.warn('[connections] background 24h fetch failed:', e));
+      .catch(e => console.warn('[connections] background 24h fetch failed:', e))
+      .finally(() => setFetching(-1));
   }
 });
 

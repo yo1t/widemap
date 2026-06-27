@@ -140,7 +140,9 @@ describe('Frontend script wiring invariants', () => {
       'style.css should include the generated asset version');
     assert.match(html, /<script type="module" src="__BASE__\/js\/main\.js\?v=__ASSET_VERSION__"><\/script>/,
       'main.js ES module entry should include the generated asset version');
-    assert.match(serverJs, /const\s+ASSET_VERSION\s*=\s*process\.env\.EGRESSVIEW_ASSET_VERSION\s*\|\|\s*String\(Date\.now\(\)\)/,
+    assert.match(serverJs, /process\.env\.EGRESSVIEW_ASSET_VERSION/,
+      'server should read the asset version from the environment variable');
+    assert.match(serverJs, /String\(Date\.now\(\)\)/,
       'server should generate an asset version for each process start unless explicitly set');
     assert.match(serverJs, /\.replace\(/,
       'index rendering should perform template replacement');

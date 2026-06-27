@@ -487,6 +487,9 @@ document.getElementById('devices-refresh-btn').addEventListener('click', loadDev
 
 initDevices();
 
+let _onDevicesLoaded = null;
+export function setOnDevicesLoaded(fn) { _onDevicesLoaded = fn; }
+
 // ── Load data ─────────────────────────────────────────────────────────────────
 async function loadDevicesView() {
   try {
@@ -498,6 +501,7 @@ async function loadDevicesView() {
     if (!res.ok) throw new Error(res.statusText);
     const data = await res.json();
     devicesData = data.devices || [];
+    if (_onDevicesLoaded) _onDevicesLoaded(devicesData);
     // Refresh detail if open (re-renders with updated candidates)
     if (dvDetailDevice) {
       const fresh = devicesData.find(d => d.ip === dvDetailDevice.ip);
@@ -508,6 +512,15 @@ async function loadDevicesView() {
     console.error('[devices] load failed:', e);
     document.getElementById('devices-count').textContent = tVars('devices.loadFailed', { error: e.message });
   }
+}
+
+export function refreshDetailPanelNote(newDevicesData) {
+  if (!dvDetailDevice) return;
+  const fresh = (newDevicesData || devicesData).find(d => d.ip === dvDetailDevice.ip);
+  if (!fresh) return;
+  dvDetailDevice = fresh;
+  const ta = document.getElementById('dv-detail-note-ta');
+  if (ta) ta.value = lookupNote(fresh.ip, fresh.mac, fresh.deviceId);
 }
 
 export { loadDevicesView, renderDevicesTable, initDevices, devicesData };

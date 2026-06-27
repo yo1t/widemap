@@ -8,7 +8,7 @@ import { asusActive, lookupNote, apiFetch, openNoteModal } from './auth-socket.j
 import { updateStats } from './stats.js?v=__ASSET_VERSION__';
 import { updateLogView } from './log.js?v=__ASSET_VERSION__';
 import { nlRender } from './notif-log.js?v=__ASSET_VERSION__';
-import { devicesData, renderDevicesTable, setDvSelectedIp } from './devices.js?v=__ASSET_VERSION__';
+import { renderDevicesTable, setDvSelectedIp } from './devices.js?v=__ASSET_VERSION__';
 
 let _devicesDataRef = [];
 export function setGraphDevicesDataRef(v) { _devicesDataRef = v; }
