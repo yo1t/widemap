@@ -47,6 +47,62 @@ function getScriptContent() {
   return parts.join('\n');
 }
 
+function getAppScriptFiles() {
+  const files = [];
+  const srcRe = /<script src="__BASE__\/js\/([^"]+)"><\/script>/g;
+  let m;
+  while ((m = srcRe.exec(html)) !== null) {
+    files.push(m[1]);
+  }
+  return files;
+}
+
+describe('Frontend script wiring invariants', () => {
+  it('loads app scripts in the expected dependency order', () => {
+    assert.deepEqual(getAppScriptFiles(), [
+      'i18n.js',
+      'utils.js',
+      'connections-panel.js',
+      'auth-socket.js',
+      'graph.js',
+      'settings.js',
+      'map-common.js',
+      'stats.js',
+      'time-filter.js',
+      'view-tabs.js',
+      'log.js',
+      'beacon.js',
+      'threat-popup.js',
+      'devices.js',
+      'notif-log.js',
+      'main.js',
+    ]);
+  });
+
+  it('keeps main.js as the final app script', () => {
+    assert.equal(getAppScriptFiles().at(-1), 'main.js');
+  });
+
+  it('keeps cross-file public APIs available until module migration', () => {
+    const publicApis = [
+      { file: 'auth-socket.js', name: 'apiFetch', re: /async function apiFetch\(/ },
+      { file: 'auth-socket.js', name: 'socket', re: /const socket\s*=\s*io\(/ },
+      { file: 'auth-socket.js', name: 'lookupNote', re: /function lookupNote\(/ },
+      { file: 'graph.js', name: 'buildGraphFromConnections', re: /function buildGraphFromConnections\(/ },
+      { file: 'stats.js', name: 'updateStats', re: /async function updateStats\(/ },
+      { file: 'log.js', name: 'updateLogView', re: /function updateLogView\(/ },
+      { file: 'devices.js', name: 'loadDevicesView', re: /async function loadDevicesView\(/ },
+      { file: 'notif-log.js', name: 'loadNotifLog', re: /async function loadNotifLog\(/ },
+      { file: 'view-tabs.js', name: 'switchView', re: /function switchView\(/ },
+    ];
+
+    for (const { file, name, re } of publicApis) {
+      const source = fs.readFileSync(path.join(jsDir, file), 'utf8');
+      assert.match(source, re, `${name} must remain available from ${file}`);
+    }
+  });
+});
+
 describe('Frontend TDZ lint', () => {
   const script = getScriptContent();
   const lines  = script.split('\n');

@@ -37,7 +37,8 @@ test('js/i18n.js is served (200)', async ({ request }) => {
 const PHASE2_JS_FILES = [
   'utils.js', 'connections-panel.js', 'auth-socket.js', 'graph.js',
   'settings.js', 'map-common.js', 'stats.js', 'time-filter.js',
-  'view-tabs.js', 'log.js', 'threat-popup.js', 'devices.js', 'main.js',
+  'view-tabs.js', 'log.js', 'beacon.js', 'threat-popup.js',
+  'devices.js', 'notif-log.js', 'main.js',
 ];
 for (const file of PHASE2_JS_FILES) {
   test(`js/${file} is served (200)`, async ({ request }) => {
@@ -175,6 +176,36 @@ test('tab switching produces no console errors', async ({ page }) => {
   }
 
   expect(fatalErrors(errors), `Tab switch errors:\n  ${fatalErrors(errors).join('\n  ')}`).toHaveLength(0);
+});
+
+// ⑦ 検出ログ詳細: 行クリックで開き、右上のバツで閉じること
+test('notification log detail popup opens and closes', async ({ page }) => {
+  if (!TOKEN) test.skip(true, 'EGRESSVIEW_TOKEN not set — skipping auth-gated test');
+
+  const errors = collectErrors(page);
+  await authPage(page);
+
+  await page.click('#btn-notif-log');
+  await page.waitForTimeout(1500);
+
+  const rows = page.locator('#notif-log-tbody tr');
+  const rowCount = await rows.count();
+  if (rowCount === 0) {
+    test.skip(true, 'no notification log rows');
+  }
+
+  const firstRowText = await rows.first().innerText().catch(() => '');
+  if (/検出ログがありません|No notification logs|HTTP \d+|serverUnavailable/.test(firstRowText)) {
+    test.skip(true, 'no usable notification log row');
+  }
+
+  await rows.first().click();
+  const overlay = page.locator('#notif-log-detail-overlay');
+  await expect(overlay).toBeVisible();
+  await page.click('#notif-log-detail-close');
+  await expect(overlay).toHaveClass(/hidden/);
+
+  expect(fatalErrors(errors), `Notification detail errors:\n  ${fatalErrors(errors).join('\n  ')}`).toHaveLength(0);
 });
 
 // ⑦ 期間フィルター変更後にエラーが出ないこと（getFilteredConnections の間接テスト）
