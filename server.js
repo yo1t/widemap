@@ -63,7 +63,10 @@ const DEMO_ADMIN_TOKEN = process.env.DEMO_ADMIN_TOKEN || 'demo-token-ci';
 const DEMO_DB_PATH     = path.join(__dirname, '.egressview.demo.db');
 const DEMO_BACKUP_DIR  = path.join(__dirname, '.egressview-demo-backups');
 const _rawAssetVersion = process.env.EGRESSVIEW_ASSET_VERSION || '';
-const ASSET_VERSION    = /^[A-Za-z0-9._-]+$/.test(_rawAssetVersion) ? _rawAssetVersion : String(Date.now());
+const ASSET_VERSION    = /^[A-Za-z0-9._-]+$/.test(_rawAssetVersion) ? _rawAssetVersion : (() => {
+  if (_rawAssetVersion) console.warn(`[server] EGRESSVIEW_ASSET_VERSION contains invalid characters ('${_rawAssetVersion}'); falling back to timestamp.`);
+  return String(Date.now());
+})();
 
 
 // ─── Shared mutable state ─────────────────────────────────────────────────────
@@ -506,10 +509,12 @@ app.get(jsModuleRoutes, (req, res, next) => {
   const filePath = path.join(__dirname, 'public', 'js', file);
   fs.readFile(filePath, 'utf8', (err, js) => {
     if (err) return next();
+    const replaced = js.replace(/__ASSET_VERSION__/g, htmlEscape(ASSET_VERSION));
+    const etag = `"${ASSET_VERSION}-${file}"`;
     res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    res.type('application/javascript').send(
-      js.replace(/__ASSET_VERSION__/g, htmlEscape(ASSET_VERSION))
-    );
+    res.setHeader('ETag', etag);
+    if (req.headers['if-none-match'] === etag) return res.status(304).end();
+    res.type('application/javascript').send(replaced);
   });
 });
 

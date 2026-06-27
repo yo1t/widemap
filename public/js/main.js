@@ -1,19 +1,16 @@
 // ─── ES Module entry point ────────────────────────────────────────────────────
 import { t, tVars } from './i18n.js?v=__ASSET_VERSION__';
 import { _BASE } from './utils.js?v=__ASSET_VERSION__';
-import { allConnections, mergeConnections, dataRangeFrom, serverTimeOffset, setAllConnections, setDataRangeFrom, setServerTimeOffset, updateConnPanel } from './connections-panel.js?v=__ASSET_VERSION__';
-import { socket, connState, asusActive, setAsusActive, yamahaConfigured, notesMap, setNotesMap, adminToken, apiFetch, errorBanner, updateConnBadge, lookupNote, refreshAllNotes } from './auth-socket.js?v=__ASSET_VERSION__';
-import { statsMode, setViewTabHandlers } from './view-tabs.js?v=__ASSET_VERSION__';
+import { allConnections, mergeConnections, dataRangeFrom, serverTimeOffset, setAllConnections, setDataRangeFrom, setServerTimeOffset, updateConnPanel, setFetching } from './connections-panel.js?v=__ASSET_VERSION__';
+import { socket, connState, asusActive, setAsusActive, yamahaConfigured, notesMap, setNotesMap, adminToken, apiFetch, errorBanner, updateConnBadge, lookupNote, refreshAllNotes, setDevicesDataRef } from './auth-socket.js?v=__ASSET_VERSION__';
+import { statsMode, setViewTabHandlers, initViewTabs } from './view-tabs.js?v=__ASSET_VERSION__';
 import { nodes, selectedMac, buildGraph, buildGraphFromConnections, updateOrgGraph, scheduleGraphAutoFit, fetchGraphSummary, clearGraphSummary, graphSummary, stopGraph, showToast, applyFilter, applyGraphFilter, lastClients, initGraph, resizeGraph, setGraphDevicesDataRef } from './graph.js?v=__ASSET_VERSION__';
 import { updateStats, stStopSpin, stStopFlatAnim, initStats } from './stats.js?v=__ASSET_VERSION__';
 import { openSettings, showStatus } from './settings.js?v=__ASSET_VERSION__';
-import { setDevicesDataRef } from './auth-socket.js?v=__ASSET_VERSION__';
 import { devicesData, setDevicesData, initDevices, loadDevicesView, setOnDevicesLoaded, refreshDetailPanelNote } from './devices.js?v=__ASSET_VERSION__';
-import { initViewTabs } from './view-tabs.js?v=__ASSET_VERSION__';
 import { updateLogView, initLog } from './log.js?v=__ASSET_VERSION__';
 import { initNotifLog, loadNotifLog } from './notif-log.js?v=__ASSET_VERSION__';
 import { initTimeFilter, refreshCurrentTimeFilterView } from './time-filter.js?v=__ASSET_VERSION__';
-import { setFetching } from './connections-panel.js?v=__ASSET_VERSION__';
 import { loadBeacons } from './beacon.js?v=__ASSET_VERSION__';
 
 // ─── Cross-module reference injection ────────────────────────────────────────
