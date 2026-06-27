@@ -405,6 +405,25 @@ describe('Server runtime invariants', () => {
       'successful summary render should mark the maps as current for that key');
   });
 
+  it('stats maps do not rebuild Flat map layers when summary point geometry is unchanged', () => {
+    const script = getScriptContent();
+    const start = script.indexOf('function updateStatsMaps(selIp, mapPoints)');
+    assert.notEqual(start, -1, 'updateStatsMaps should exist');
+    const end = script.indexOf('let chartMode', start);
+    assert.notEqual(end, -1, 'updateStatsMaps section end marker should exist');
+    const updateStatsMapsFn = script.slice(start, end);
+    assert.match(script, /var\s+stMapRenderSignature\s*=\s*null/,
+      'stats maps should remember the last rendered map geometry signature');
+    assert.match(updateStatsMapsFn, /const\s+renderSignature\s*=\s*mapPoints/,
+      'summary-provided map points should produce a stable render signature');
+    assert.match(updateStatsMapsFn, /Number\(p\.lat\)\.toFixed\(3\)/,
+      'map signatures should be based on coarse geometry, not volatile counters');
+    assert.match(updateStatsMapsFn, /if\s*\(\s*renderSignature\s*&&\s*stMapRenderSignature\s*===\s*renderSignature\s*\)/,
+      'same summary geometry should not rebuild map layers');
+    assert.match(updateStatsMapsFn, /stMapRenderSignature\s*=\s*renderSignature;[\s\S]*?stRenderGlobeData\(\);[\s\S]*?stRenderFlatData\(\);/,
+      'map layers should only redraw after the signature is updated');
+  });
+
   it('Yamaha SSH prompt wait clears stale timers and accepts privileged prompts', () => {
     assert.match(yamahaJs, /function\s+looksLikeShellPrompt/,
       'Yamaha poller should centralize shell prompt detection');

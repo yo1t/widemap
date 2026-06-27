@@ -12,6 +12,7 @@ var stFlatInitScale = null, stFlatInitTranslate = null;
 var stFlatZoom = 1, stFlatPanX = 0, stFlatPanY = 0;
 var stSelIp = null; // active device filter (null = all)
 var stMapPointOverride = null;
+var stMapRenderSignature = null;
 const ST_SPEEDS = [0.04, 0.08, 0.16, 0.32, 0.64];
 var stSpeedIdx = 2; // default: ST_SPEEDS[2] = 0.16
 
@@ -349,9 +350,23 @@ function initStatsMaps(resetRotation) {
 }
 
 function updateStatsMaps(selIp, mapPoints) {
+  const nextSelIp = mapPoints ? null : (selIp ?? null);
+  const renderSignature = mapPoints
+    ? `summary|${selIp || ''}|${(mapPoints || []).map(p => [
+        p.key || p.org || '',
+        Number(p.lat).toFixed(3),
+        Number(p.lon).toFixed(3),
+        p.threat ? '1' : '0',
+      ].join(':')).sort().join('|')}`
+    : null;
   stMapPointOverride = mapPoints || null;
-  stSelIp = mapPoints ? null : (selIp ?? null);
+  stSelIp = nextSelIp;
   if (!stGlobeSvg) { initStatsMaps(); return; }
+  if (renderSignature && stMapRenderSignature === renderSignature) {
+    stStartSpin();
+    return;
+  }
+  stMapRenderSignature = renderSignature;
   stRenderGlobeData();
   stRenderFlatData();
   stStartSpin();
