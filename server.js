@@ -61,8 +61,9 @@ const CONFIG_FILE       = require('./src/config').DEFAULT_CONFIG_FILE;
 // explored without real router hardware (used in CI for Playwright smoke tests).
 const DEMO_MODE       = process.env.DEMO_MODE === 'true';
 const DEMO_ADMIN_TOKEN = process.env.DEMO_ADMIN_TOKEN || 'demo-token-ci';
-const DEMO_DB_PATH     = path.join(__dirname, '.egressview.demo.db');
-const DEMO_BACKUP_DIR  = path.join(__dirname, '.egressview-demo-backups');
+const DEMO_DB_PATH         = path.join(__dirname, '.egressview.demo.db');
+const DEMO_RUNTIME_DB_PATH = path.join(__dirname, '.egressview.demo.runtime.db');
+const DEMO_BACKUP_DIR      = path.join(__dirname, '.egressview-demo-backups');
 const _rawAssetVersion = process.env.EGRESSVIEW_ASSET_VERSION || '';
 const ASSET_VERSION    = /^[A-Za-z0-9._-]+$/.test(_rawAssetVersion) ? _rawAssetVersion : (() => {
   if (_rawAssetVersion) console.warn(`[server] EGRESSVIEW_ASSET_VERSION contains invalid characters ('${_rawAssetVersion}'); falling back to timestamp.`);
@@ -764,7 +765,12 @@ server.listen(PORT, () => {
   logger.info(`EgressView: ${tlsOptions ? 'https' : 'http'}://localhost:${PORT}`);
   loadConfig();
   const configuredDbPath = process.env.EGRESSVIEW_DB_PATH || process.env.EGRESSVIEW_DB || '';
-  const runtimeDbPath = DEMO_MODE ? (configuredDbPath || DEMO_DB_PATH) : configuredDbPath;
+  if (DEMO_MODE && !configuredDbPath && fs.existsSync(DEMO_DB_PATH)) {
+    // Copy the committed snapshot to a separate runtime file so the tracked
+    // snapshot is never modified at runtime (prevents dirty working tree).
+    fs.copyFileSync(DEMO_DB_PATH, DEMO_RUNTIME_DB_PATH);
+  }
+  const runtimeDbPath = DEMO_MODE ? (configuredDbPath || DEMO_RUNTIME_DB_PATH) : configuredDbPath;
   if (runtimeDbPath) process.env.EGRESSVIEW_DB_PATH = runtimeDbPath;
   backup.configure({ dbPath: runtimeDbPath });
 

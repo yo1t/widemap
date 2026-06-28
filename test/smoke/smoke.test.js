@@ -504,7 +504,7 @@ test('settings tabs save and connection buttons work without console errors', as
   await expect(page.locator('#yamaha-detect-status')).toBeVisible();
   await page.click('#yamaha-connect-btn');
   await expect(page.locator('#yamaha-status')).toBeVisible();
-  await page.waitForTimeout(1_300);
+  await page.waitForSelector('#settings-overlay', { state: 'hidden' });
 
   await page.click('#settings-btn');
   await page.click('.settings-tab[data-tab="l2"]');
@@ -513,7 +513,7 @@ test('settings tabs save and connection buttons work without console errors', as
   await page.locator('#s-asus-pass').fill('demo-pass');
   await page.click('#asus-connect-btn');
   await expect(page.locator('#asus-status')).toBeVisible();
-  await page.waitForTimeout(1_300);
+  await page.waitForSelector('#settings-overlay', { state: 'hidden' });
 
   await page.click('#settings-btn');
   await page.click('.settings-tab[data-tab="general"]');

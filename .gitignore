@@ -25,7 +25,10 @@ node_modules/
 .egressview.db-wal
 .egressview.db-shm
 .egressview-backups/
-# demo DB is committed to git (WAL/SHM only excluded)
+# demo DB snapshot is committed to git; runtime copy and WAL/SHM are excluded
+.egressview.demo.runtime.db
+.egressview.demo.runtime.db-wal
+.egressview.demo.runtime.db-shm
 .egressview.demo.db-wal
 .egressview.demo.db-shm
 .egressview-demo-backups/
