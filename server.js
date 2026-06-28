@@ -4,8 +4,9 @@ require('dotenv').config();
 // Prefer IPv4 (prevents external HTTPS from stalling on IPv6, e.g. on EC2)
 try { require('dns').setDefaultResultOrder('ipv4first'); } catch {}
 
-const express = require('express');
-const http    = require('http');
+const express     = require('express');
+const compression = require('compression');
+const http        = require('http');
 const https   = require('https');
 const { Server } = require('socket.io');
 const crypto  = require('crypto');
@@ -535,6 +536,7 @@ const staticOptions = {
   },
 };
 if (SUBPATH) app.use(SUBPATH, express.static(path.join(__dirname, 'public'), staticOptions));
+app.use(compression());
 app.use(express.static(path.join(__dirname, 'public'), staticOptions));
 app.use(express.json({ limit: '64kb' }));
 
