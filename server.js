@@ -776,6 +776,10 @@ server.listen(PORT, () => {
   backup.configure({ dbPath: runtimeDbPath });
 
   if (DEMO_MODE) {
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('[demo] DEMO_MODE=true is not allowed when NODE_ENV=production. Refusing to start.');
+      process.exit(1);
+    }
     // Use a separate DB file for demo mode so production data is never touched.
     // If .egressview.demo.db exists (committed to git), start from that snapshot.
     // Otherwise fall back to a fresh in-memory-style DB at the demo path.

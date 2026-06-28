@@ -126,6 +126,14 @@ describe('ipToNum', () => {
   it('converts 192.168.1.1', () => {
     assert.equal(ipToNum('192.168.1.1'), (192 << 24 | 168 << 16 | 1 << 8 | 1) >>> 0);
   });
+
+  it('returns null for an IPv6 address', () => {
+    assert.equal(ipToNum('2001:db8::1'), null);
+  });
+
+  it('returns null for ::1 (loopback IPv6)', () => {
+    assert.equal(ipToNum('::1'), null);
+  });
 });
 
 describe('matchThreatIntel (integration with parsed data)', () => {

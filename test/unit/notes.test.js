@@ -34,6 +34,14 @@ describe('notes.isSafeKey', () => {
     assert.ok(notes.isSafeKey('aa:bb:cc:dd:ee:ff|192.168.1.50'));
   });
 
+  it('accepts a valid IPv6 address', () => {
+    assert.ok(notes.isSafeKey('2001:db8::1'));
+  });
+
+  it('accepts a composite IPv6|MAC key', () => {
+    assert.ok(notes.isSafeKey('2001:db8::1|aa:bb:cc:dd:ee:ff'));
+  });
+
   it('rejects a path-like string', () => {
     assert.ok(!notes.isSafeKey('../etc/passwd'));
   });

@@ -514,6 +514,15 @@ describe('parseDnsmasqLine', () => {
     assert.equal(r.resolvedIp, '198.51.100.85');
   });
 
+  it('parses a reply line with IPv6 address and preserves it as resolvedIp', () => {
+    const line = 'Jun  7 18:00:00 dnsmasq[1234]: reply ipv6.example.com is 2001:db8::1';
+    const r = parseDnsmasqLine(line);
+    assert(r !== null);
+    assert.equal(r.type, 'reply');
+    assert.equal(r.domain, 'ipv6.example.com');
+    assert.equal(r.resolvedIp, '2001:db8::1');
+  });
+
   it('sets resolvedIp to null for CNAME reply', () => {
     const line = 'Jun  7 17:34:22 dnsmasq[1234]: reply example.com is <CNAME>';
     const r = parseDnsmasqLine(line);
