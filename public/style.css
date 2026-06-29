@@ -11,9 +11,10 @@
   #settings-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.6);
     display: flex; align-items: center; justify-content: center;
-    z-index: 1000; transition: opacity 0.2s;
+    z-index: 1000; transition: opacity 0.2s, visibility 0.2s;
+    visibility: visible;
   }
-  #settings-overlay.hidden { opacity: 0; pointer-events: none; }
+  #settings-overlay.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
   .settings-card {
     background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
     width: 460px; box-shadow: 0 20px 60px rgba(0,0,0,0.6);
